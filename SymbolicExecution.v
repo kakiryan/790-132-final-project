@@ -103,3 +103,14 @@ Compute Int_non_neg (Positive 3).
 Compute Int_non_neg (Zero).
 Compute Int_non_neg (Negative 3).
 
+(** TODO: Just brainstorming adding notes -- 3/23/21
+  - function to visit  each variable in the value store associated with
+ execution state and make symbolic
+  - Inductive statement type? Starting below 
+  - in Vol 3 ADT Chapter -- Table type would be good for name/symbol mappings.
+ - *)
+
+Inductive statement := 
+  | assignment (* made up of a LHS loc and a RHS expr to evaluated*)
+  | if_stmt (* evaluates to the boolexp defined above *)
+  | go_to.
