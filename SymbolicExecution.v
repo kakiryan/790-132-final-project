@@ -1,3 +1,4 @@
+From Coq Require Import Strings.String.
 (** We can treat a boolean expression as one object,
     if we wrap it inside this type. *)
 Inductive boolexp : Type :=
@@ -58,6 +59,19 @@ Check Negative 4.
 Check Positive 2.
 Check O.
 
+Definition W : string := "W".
+Definition X : string := "X".
+Definition Y : string := "Y".
+Definition Z : string := "Z".
+
+Inductive intexp : Type :=
+| IntAdd (n1 n2: Int)
+| IntSub (n1 n2: Int)
+| IntMult (n1 n2: Int)
+| IntId (x : string).
+
+
+
 Definition Int_plus (n1 n2: Int) : Int :=
  match n1, n2 with
  | Positive n1, Positive n2 => Positive (n1 + n2)
@@ -74,6 +88,25 @@ Compute Int_plus (Negative 6) (Positive 4).
 Compute Int_plus Zero Zero.
 Compute Int_plus (Negative 5) Zero.
 
+
+(* this may not be quite right *) 
+Definition Int_minus (n1 n2: Int) : Int :=
+ match n1, n2 with
+ | Positive n1, Positive n2 => Positive (n1 - n2)
+ | Positive n1, Negative n2 => if n2 <=? n1 then Positive (n1 + n2) else Negative (n2 + n1)
+ | Negative n1, Positive n2 => if n1 <=? n2 then Negative (n2 + n1) else Negative (n1 + n2)
+ | Negative n1, Negative n2 => Negative (n1 - n2)
+ | Zero, Positive n2 => Negative n2
+ | Zero, Negative n2 => Positive n2
+ | x, Zero => x
+end.
+
+Check Int_minus (Negative 2) (Positive 4).
+Compute Int_minus (Negative 2) (Positive 4).
+Compute Int_minus (Negative 6) (Positive 4).
+Compute Int_minus Zero (Positive 2).
+Compute Int_minus (Negative 5)  (Negative 5).
+
 Definition Int_mult (n1 n2: Int) : Int :=
  match n1, n2 with
  | Positive n1, Positive n2 => Positive (n1 * n2)
@@ -89,6 +122,15 @@ Compute Int_mult (Negative 2) (Positive 4).
 Compute Int_mult (Negative 6) (Positive 4).
 Compute Int_mult Zero (Positive 2).
 Compute Int_mult (Negative 5)  (Negative 5).
+
+Definition inteval (a: intexp) : Int :=
+ match a with
+  | IntAdd n1 n2 => Int_plus n1 n2
+  | IntSub n1 n2 => Int_minus n1 n2
+  | IntMult n1 n2 => Int_mult n1 n2
+  | IntId x => Positive 2 (* Lol this is arbitrary so it will compile. 
+need to do something like the textbook does with states probably *)
+end.
 
 (* the only condition supported by lang is checking its >= 0 *)
 Definition Int_non_neg (n1 : Int) : boolexp :=
@@ -111,6 +153,10 @@ Compute Int_non_neg (Negative 3).
  - *)
 
 Inductive statement := 
-  | assignment (* made up of a LHS loc and a RHS expr to evaluated*)
-  | if_stmt (* evaluates to the boolexp defined above *)
-  | go_to.
+  | assignment (x: string) (a: intexp) (* made up of a LHS loc and a RHS expr to evaluated*)
+  | if_stmt (b: boolexp) (c1 c2: statement) (* evaluates to the boolexp defined above *)
+  | go_to. (* how do we ant to define functions? do we want to limit them to be just a name with 2 int params or someting?*)
+
+
+Notation "'if' x 'then' y 'else' z 'end'" :=
+         (if_stmt x y z). (*what level to put at ? *)
