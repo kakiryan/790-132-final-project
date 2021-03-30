@@ -1,14 +1,12 @@
 From Coq Require Import Strings.String.
-From Coq Require Import ZArith.Int.
-(* TODO: Figure out how to use numbers *)
-Import Z_as_Int.
+Require Import ZArith.
+Open Scope Z_scope.
 
-(** We can treat a boolean expression as one object,
-    if we wrap it inside this type. *)
+Compute 1 + -2.
 
 (** TODO: 
-    - Figure out how to use numbers
-    - Finish booleval last case
+    - Figure out how to use numbers (done)
+    - Finish booleval last case (done)
     - Include program state (potentially with Table from ADT chapter)
       + Update eval functions to consider state
       + Update evals with new notation
@@ -25,20 +23,24 @@ Declare Custom Entry intlang.
 Declare Scope intlang_scope.
 
 Inductive intexp : Type :=
-| IntLit (n : nat)
+| IntLit (n : Z)
 | IntAdd (n1 n2: intexp)
 | IntSub (n1 n2: intexp)
 | IntMult (n1 n2: intexp).
 (* | IntId (x : string) *)
 
 (* TODO: update function to also consider state *)
-Fixpoint inteval (ie : intexp) : nat :=
+Fixpoint inteval (ie : intexp) : Z :=
   match ie with
   | IntLit n => n
-  | IntAdd n1 n2 => (inteval n1) + (inteval n2)
-  | IntSub n1 n2 => (inteval n1) - (inteval n2)
-  | IntMult n1 n2 => (inteval n1) * (inteval n2)
+  | IntAdd n1 n2 => inteval(n1) + inteval(n2)
+  | IntSub n1 n2 => inteval(n1) - inteval(n2)
+  | IntMult n1 n2 => inteval(n1) * inteval(n2)
   end.
+
+Example test_aeval1:
+  inteval (IntAdd (IntLit 2) (IntLit (-3))) = -1.
+Proof. reflexivity. Qed.
 
 Inductive boolexp : Type :=
   | BTrue
@@ -61,7 +63,7 @@ Fixpoint eval_boolexp (be : boolexp) : bool :=
   | Band b1 b2 => (eval_boolexp b1) && (eval_boolexp b2)
   | Bor b1 b2 => (eval_boolexp b1) || (eval_boolexp b2)
   | Bnot b => negb (eval_boolexp b)
-  | Bge0 n => true
+  | Bge0 n => Z.leb 0 (inteval(n))
   end.
 
 Fixpoint eval_pathcond (p : pathcond) : bool :=
