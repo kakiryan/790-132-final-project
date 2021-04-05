@@ -1,6 +1,7 @@
 From Coq Require Import Strings.String.
 Require Import ZArith.
 Open Scope Z_scope.
+From LF Require Import Maps.
 
 Compute 1 + -2.
 
@@ -19,64 +20,109 @@ Compute 1 + -2.
     - Make notation for new concepts
 *)
 
-Declare Custom Entry intlang.
-Declare Scope intlang_scope.
+Declare Custom Entry com.
+Declare Scope com_scope.
 
-Inductive intexp : Type :=
+Inductive IntExp : Type :=
 | IntLit (n : Z)
-| IntAdd (n1 n2: intexp)
-| IntSub (n1 n2: intexp)
-| IntMult (n1 n2: intexp).
-(* | IntId (x : string) *)
+| IntAdd (n1 n2: IntExp)
+| IntSub (n1 n2: IntExp)
+| IntMult (n1 n2: IntExp)
+| IntId (x : string).
 
-(* TODO: update function to also consider state *)
-Fixpoint inteval (ie : intexp) : Z :=
-  match ie with
-  | IntLit n => n
-  | IntAdd n1 n2 => inteval(n1) + inteval(n2)
-  | IntSub n1 n2 => inteval(n1) - inteval(n2)
-  | IntMult n1 n2 => inteval(n1) * inteval(n2)
-  end.
 
-Example test_aeval1:
+Definition state := total_map IntExp.
+
+
+
+(* Example test_aeval1:
   inteval (IntAdd (IntLit 2) (IntLit (-3))) = -1.
-Proof. reflexivity. Qed.
+Proof. reflexivity. Qed. *)
 
-Inductive boolexp : Type :=
+Inductive BoolExp : Type :=
   | BTrue
   | BFalse
-  | Band (b1 : boolexp) (b2 : boolexp)
-  | Bor (b1 : boolexp) (b2 : boolexp)
-  | Bnot (b : boolexp)
-  | Bge0 (n : intexp).
+  | Band (b1 : BoolExp) (b2 : BoolExp)
+  | Bor (b1 : BoolExp) (b2 : BoolExp)
+  | Bnot (b : BoolExp)
+  | Bge0 (n : IntExp).
+
+
+Coercion IntId : string >-> IntExp.
+Coercion IntLit : Z >-> IntExp.
+
+Notation "<{ e }>" := e (at level 0, e custom com at level 99) : com_scope.
+Notation "( x )" := x (in custom com, x at level 99) : com_scope.
+Notation "x" := x (in custom com at level 0, x constr at level 0) : com_scope.
+Notation "f x .. y" := (.. (f x) .. y)
+                  (in custom com at level 0, only parsing,
+                  f constr at level 0, x constr at level 9,
+                  y constr at level 9) : com_scope.
+Notation "x + y" := (IntAdd x y)
+  (in custom com at level 50, left associativity).
+Notation "x - y" := (IntSub x y)
+  (in custom com at level 50, left associativity).
+Notation "x * y" := (IntMult x y)
+  (in custom com at level 40, left associativity).
+Notation "'true'"  := true (at level 1).
+Notation "'true'"  := BTrue (in custom com at level 0).
+Notation "'false'"  := false (at level 1).
+Notation "'false'"  := BFalse (in custom com at level 0).
+Notation "x >= 0" := (Bge0 x) (in custom com at level 70, no associativity).
+Notation "x && y" := (Band x y)
+  (in custom com at level 80, left associativity).
+Notation "x || y" := (Bor x y)
+  (in custom com at level 80, left associativity).
+Notation "'~' b"  := (Bnot b)
+  (in custom com at level 75, right associativity).
+
+Open Scope com_scope. 
+
+Check <{1 + 1}>.
+
+
+(* TODO: update function to also consider state. check for reserved notation *)
+Fixpoint inteval (s : state) (ie : IntExp) : IntExp :=
+  match ie with
+  | IntLit n => IntLit n
+  | <{n1 + n2}> =>  <{(inteval s n1) + (inteval s n2)}>
+  | <{n1 - n2}> => <{(inteval s n1) - (inteval s n2)}>
+  | <{n1 * n2}> =>  <{(inteval s n1) * (inteval s n2)}>
+  | IntId n => s n
+  end.
+
 
 (** TODO: We want a path condition to be a list of conditions on
     symbolic variables, which isn't reflected here. *)
-Inductive pathcond : Type :=
+Inductive Pathcond : Type :=
   | none
-  | Pand (be : boolexp) (p : pathcond).
+  | Pand (be : BoolExp) (p : Pathcond).
 
-Fixpoint eval_boolexp (be : boolexp) : bool :=
+(* Fixpoint eval_BoolExp (s: state) (be : BoolExp) : bool :=
   match be with
   | BTrue => true
   | BFalse => false
-  | Band b1 b2 => (eval_boolexp b1) && (eval_boolexp b2)
-  | Bor b1 b2 => (eval_boolexp b1) || (eval_boolexp b2)
-  | Bnot b => negb (eval_boolexp b)
-  | Bge0 n => Z.leb 0 (inteval(n))
+  | Band b1 b2 => (eval_BoolExp b1) && (eval_BoolExp b2)
+  | Bor b1 b2 => (eval_BoolExp b1) || (eval_BoolExp b2)
+  | Bnot b => negb (eval_BoolExp b)
+  | Bge0 n => Z.leb 0 (inteval s n)
   end.
 
 Fixpoint eval_pathcond (p : pathcond) : bool :=
   match p with
   | none       => true
-  | Pand be p' => (eval_boolexp be) && (eval_pathcond p')
+  | Pand be p' => (eval_BoolExp be) && (eval_pathcond p')
   end.
+*)
+
+
+
 
 
   (** TODO: Defining the Integer language.
   - exlusively signed ints
   - simple assigns
-  - if statements with then/else
+  - if Statements with then/else
   - go-to labels
   - way to get inputs (e.g. procedure parameters, global variables, read operations). 
   - arithmetic expr: +, -, x
@@ -90,40 +136,16 @@ Definition Z : string := "Z".
 (** TODO: Just brainstorming adding notes -- 3/23/21
   - function to visit  each variable in the value store associated with
  execution state and make symbolic
-  - Inductive statement type? Starting below 
+  - Inductive Statement type? Starting below 
   - in Vol 3 ADT Chapter -- Table type would be good for name/symbol mappings.
  - *)
 
-Inductive statement := 
-  | assignment (x: string) (a: intexp) (* made up of a LHS loc and a RHS expr to evaluated*)
-  | if_stmt (b: boolexp) (c1 c2: statement) (* evaluates to the boolexp defined above *)
-  | go_to. (* how do we want to define functions? do we want to limit them to be just a name with 2 int params or someting?*)
+Inductive Statement := 
+  | Assignment (x: string) (a: IntExp) (* made up of a LHS loc and a RHS expr to evaluated*)
+  | If_Stmt (b: BoolExp) (c1 c2: Statement) (* evaluates to the BoolExp defined above *)
+  | Go_To. (* how do we want to define functions? do we want to limit them to be just a name with 2 int params or someting?*)
 
 
 Notation "'if' x 'then' y 'else' z 'end'" :=
          (if_stmt x y z). (*what level to put at ? *)
 
-Notation "<{ e }>" := e (at level 0, e custom intlang at level 99) : com_scope.
-Notation "( x )" := x (in custom intlang, x at level 99) : com_scope.
-Notation "x" := x (in custom intlang at level 0, x constr at level 0) : com_scope.
-Notation "f x .. y" := (.. (f x) .. y)
-                  (in custom intlang at level 0, only parsing,
-                  f constr at level 0, x constr at level 9,
-                  y constr at level 9) : com_scope.
-Notation "x + y" := (IntAdd x y)
-  (in custom intlang at level 50, left associativity).
-Notation "x - y" := (IntSub x y)
-  (in custom intlang at level 50, left associativity).
-Notation "x * y" := (IntMult x y)
-  (in custom intlang at level 40, left associativity).
-Notation "'true'"  := true (at level 1).
-Notation "'true'"  := BTrue (in custom intlang at level 0).
-Notation "'false'"  := false (at level 1).
-Notation "'false'"  := BFalse (in custom intlang at level 0).
-Notation "x >= 0" := (Bge0 x) (in custom intlang at level 70, no associativity).
-Notation "x && y" := (Band x y)
-  (in custom intlang at level 80, left associativity).
-Notation "x || y" := (Bor x y)
-  (in custom intlang at level 80, left associativity).
-Notation "'~' b"  := (Bnot b)
-  (in custom intlang at level 75, right associativity).
