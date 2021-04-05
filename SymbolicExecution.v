@@ -33,12 +33,6 @@ Inductive IntExp : Type :=
 
 Definition state := total_map IntExp.
 
-
-
-(* Example test_aeval1:
-  inteval (IntAdd (IntLit 2) (IntLit (-3))) = -1.
-Proof. reflexivity. Qed. *)
-
 Inductive BoolExp : Type :=
   | BTrue
   | BFalse
@@ -47,6 +41,12 @@ Inductive BoolExp : Type :=
   | Bnot (b : BoolExp)
   | Bge0 (n : IntExp).
 
+
+Inductive Statement := 
+  | Assignment (x: string) (a: IntExp) (* made up of a LHS loc and a RHS expr to evaluated*)
+  | Seq (c1 c2: Statement)
+  | If_Stmt (b: BoolExp) (c1 c2: Statement) (* evaluates to the BoolExp defined above *)
+  | Go_To. (* how do we want to define functions? do we want to limit them to be just a name with 2 int params or someting?*)
 
 Coercion IntId : string >-> IntExp.
 Coercion IntLit : Z >-> IntExp.
@@ -75,13 +75,27 @@ Notation "x || y" := (Bor x y)
   (in custom com at level 80, left associativity).
 Notation "'~' b"  := (Bnot b)
   (in custom com at level 75, right associativity).
+Notation "x := y" :=
+         (Assignment x y)
+            (in custom com at level 0, x constr at level 0,
+             y at level 85, no associativity) : com_scope.
+Notation "'if' x 'then' y 'else' z 'end'" :=
+         (If_Stmt x y z)  (in custom com at level 89, x at level 99,
+            y at level 99, z at level 99) : com_scope.
+Notation "x ; y" :=
+         (Seq x y)
+           (in custom com at level 90, right associativity) : com_scope.
+
+Reserved Notation
+         "st '=[' c ']=>' st'"
+         (at level 40, c custom com at level 99,
+          st constr, st' constr at next level).
+
 
 Open Scope com_scope. 
 
 Check <{1 + 1}>.
 
-
-(* TODO: update function to also consider state. check for reserved notation *)
 Fixpoint inteval (s : state) (ie : IntExp) : IntExp :=
   match ie with
   | IntLit n => IntLit n
@@ -91,6 +105,40 @@ Fixpoint inteval (s : state) (ie : IntExp) : IntExp :=
   | IntId n => s n
   end.
 
+Definition a := IntId "a".
+Definition b := IntId "b".
+Definition c := IntAdd a b.
+Definition examplemap := (t_update (t_empty (IntLit 1)) "a" c).
+Compute examplemap "a".
+
+Inductive program_eval : Statement -> state -> state -> Prop :=
+ | E_Assign: forall st a n x,
+    (inteval st a) = n ->
+    st =[ x := a]=> (x !-> n ; st)
+ | E_Seq : forall c1 c2 st st' st'',
+      st  =[ c1 ]=> st'  ->
+      st' =[ c2 ]=> st'' ->
+      st  =[ c1 ; c2 ]=> st''
+
+where "st =[ c ]=> st'" := (program_eval c st st').
+
+Definition W : string := "W".
+Definition X : string := "X".
+Definition Y : string := "Y".
+Definition Z : string := "Z".
+
+Definition empty_st := (_ !-> 0).
+
+Notation "x '!->' v" := (x !-> v ; empty_st) (at level 100).
+
+Example eval_example:
+  empty_st =[
+     X := 2;
+     Z := 4
+  ]=> (X !-> 2 ; Z !-> 4).
+Proof.
+   apply E_Seq with (X !-> 2).
+   - Abort.
 
 (** TODO: We want a path condition to be a list of conditions on
     symbolic variables, which isn't reflected here. *)
@@ -116,9 +164,6 @@ Fixpoint eval_pathcond (p : pathcond) : bool :=
 *)
 
 
-
-
-
   (** TODO: Defining the Integer language.
   - exlusively signed ints
   - simple assigns
@@ -128,24 +173,10 @@ Fixpoint eval_pathcond (p : pathcond) : bool :=
   - arithmetic expr: +, -, x
   - bool expr: >= 0 only *)
 
-Definition W : string := "W".
-Definition X : string := "X".
-Definition Y : string := "Y".
-Definition Z : string := "Z".
-
 (** TODO: Just brainstorming adding notes -- 3/23/21
   - function to visit  each variable in the value store associated with
  execution state and make symbolic
   - Inductive Statement type? Starting below 
   - in Vol 3 ADT Chapter -- Table type would be good for name/symbol mappings.
  - *)
-
-Inductive Statement := 
-  | Assignment (x: string) (a: IntExp) (* made up of a LHS loc and a RHS expr to evaluated*)
-  | If_Stmt (b: BoolExp) (c1 c2: Statement) (* evaluates to the BoolExp defined above *)
-  | Go_To. (* how do we want to define functions? do we want to limit them to be just a name with 2 int params or someting?*)
-
-
-Notation "'if' x 'then' y 'else' z 'end'" :=
-         (if_stmt x y z). (*what level to put at ? *)
 
