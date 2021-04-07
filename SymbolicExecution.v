@@ -1,13 +1,10 @@
 From Coq Require Import Strings.String.
 Require Import ZArith.
 Open Scope Z_scope.
+Open Scope list_scope.
 From LF Require Import Maps.
 
-Compute 1 + -2.
-
 (** TODO: 
-    - Figure out how to use numbers (done)
-    - Finish booleval last case (done)
     - Include program state (potentially with Table from ADT chapter)
       + Update eval functions to consider state
       + Update evals with new notation
@@ -30,9 +27,6 @@ Inductive IntExp : Type :=
 | IntMult (n1 n2: IntExp)
 | IntId (x : string).
 
-
-Definition state := total_map IntExp.
-
 Inductive BoolExp : Type :=
   | BTrue
   | BFalse
@@ -41,16 +35,74 @@ Inductive BoolExp : Type :=
   | Bnot (b : BoolExp)
   | Bge0 (n : IntExp).
 
+Definition state := total_map IntExp.
 
+  (** TODO: We want a path condition to be a list of conditions on
+    symbolic variables, which isn't reflected here. *)
+Inductive Pathcond : Type :=
+| none
+| Pand (be : BoolExp) (p : Pathcond).
+
+
+(** A TreeNode represents one node of our symbolic execution tree.
+    It contains a program state, path condition, and an index
+    into the program. The index points to a particular instruction.
+*)
+Inductive TreeNode : Type :=
+  | Node (s : state) (pc : Pathcond) (index : nat).
+
+(** Getters to extract information from the TreeNode object. *)
+
+Definition extractState (n : TreeNode) : state :=
+  match n with 
+  | Node s _ _ => s
+  end.
+
+Definition extractIndex (n : TreeNode) : nat :=
+  match n with 
+  | Node _ _ i => i
+  end.
+
+Definition extractPathcond (n : TreeNode) : Pathcond :=
+  match n with 
+  | Node _ pc _ => pc
+  end.
+
+(** An ExecutionTree is either empty or a recursive structure
+  of nodes.
+  TODO: I don't think this definition is actually correct, because
+  it'll only go one level deep. *)
+Inductive ExecutionTree : Type :=
+  | empty
+  | Tr (n : TreeNode) (children : list TreeNode).
+
+(** One basic instruction in the Integer language. This differs from
+    the Imp implementation in Imp.v, because we don't have a
+    statement of the form [stmt1 ; stmt2]. Instead, we maintain
+    an ordering of statements in a list, called a Program. *)
 Inductive Statement := 
   | Assignment (x: string) (a: IntExp) (* made up of a LHS loc and a RHS expr to evaluated*)
-  | Seq (c1 c2: Statement)
   | If_Stmt (b: BoolExp) (c1 c2: Statement) (* evaluates to the BoolExp defined above *)
   | Go_To. (* how do we want to define functions? do we want to limit them to be just a name with 2 int params or someting?*)
 
+Definition Program := list Statement.
+
+Fixpoint findStatement (prog : Program) (i : nat) : Statement :=
+  match i with 
+  | O => match prog with 
+    | nil => Go_To
+    | h :: t => h
+  end
+  | S i' => match prog with 
+    | nil => Go_To
+    | h :: t => findStatement t i'
+  end
+  end.
+
+
+(* TODO: Find somewhere to put this (can we make a notation file?) *)
 Coercion IntId : string >-> IntExp.
 Coercion IntLit : Z >-> IntExp.
-
 Notation "<{ e }>" := e (at level 0, e custom com at level 99) : com_scope.
 Notation "( x )" := x (in custom com, x at level 99) : com_scope.
 Notation "x" := x (in custom com at level 0, x constr at level 0) : com_scope.
@@ -82,19 +134,11 @@ Notation "x := y" :=
 Notation "'if' x 'then' y 'else' z 'end'" :=
          (If_Stmt x y z)  (in custom com at level 89, x at level 99,
             y at level 99, z at level 99) : com_scope.
-Notation "x ; y" :=
-         (Seq x y)
-           (in custom com at level 90, right associativity) : com_scope.
-
 Reserved Notation
          "st '=[' c ']=>' st'"
          (at level 40, c custom com at level 99,
           st constr, st' constr at next level).
-
-
 Open Scope com_scope. 
-
-Check <{1 + 1}>.
 
 Fixpoint inteval (s : state) (ie : IntExp) : IntExp :=
   match ie with
@@ -105,22 +149,17 @@ Fixpoint inteval (s : state) (ie : IntExp) : IntExp :=
   | IntId n => s n
   end.
 
-Definition a := IntId "a".
-Definition b := IntId "b".
-Definition c := IntAdd a b.
-Definition examplemap := (t_update (t_empty (IntLit 1)) "a" c).
-Compute examplemap "a".
+(* TODO : Add other instruction types *)
+Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
+  | E_Assign : forall prog node x ie1 ie2 st n pc,
+    extractState node = st ->
+    extractIndex node = n ->
+    extractPathcond node = pc ->
+    (findStatement prog n) = <{x := ie1}> ->
+    inteval st ie1 = ie2 ->
+    node_eval prog node (Tr (Node (x !-> ie2 ; st) pc (n+1)) nil).
 
-Inductive program_eval : Statement -> state -> state -> Prop :=
- | E_Assign: forall st a n x,
-    (inteval st a) = n ->
-    st =[ x := a]=> (x !-> n ; st)
- | E_Seq : forall c1 c2 st st' st'',
-      st  =[ c1 ]=> st'  ->
-      st' =[ c2 ]=> st'' ->
-      st  =[ c1 ; c2 ]=> st''
-
-where "st =[ c ]=> st'" := (program_eval c st st').
+(* TODO : Add tree evaluation relation *)
 
 Definition W : string := "W".
 Definition X : string := "X".
@@ -130,21 +169,6 @@ Definition Z : string := "Z".
 Definition empty_st := (_ !-> 0).
 
 Notation "x '!->' v" := (x !-> v ; empty_st) (at level 100).
-
-Example eval_example:
-  empty_st =[
-     X := 2;
-     Z := 4
-  ]=> (X !-> 2 ; Z !-> 4).
-Proof.
-   apply E_Seq with (X !-> 2).
-   - Abort.
-
-(** TODO: We want a path condition to be a list of conditions on
-    symbolic variables, which isn't reflected here. *)
-Inductive Pathcond : Type :=
-  | none
-  | Pand (be : BoolExp) (p : Pathcond).
 
 (* Fixpoint eval_BoolExp (s: state) (be : BoolExp) : bool :=
   match be with
