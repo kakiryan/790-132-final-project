@@ -3,18 +3,14 @@ Require Import ZArith.
 Open Scope Z_scope.
 Open Scope list_scope.
 From LF Require Import Maps.
+From Coq Require Import Lists.List.
+Import ListNotations.
 
 (** TODO: 
-    - Include program state (potentially with Table from ADT chapter)
-      + Update eval functions to consider state
-      + Update evals with new notation
-    - Make a representation of the symbolic execution tree
-    - Make a program eval function (only with if/else, not loops/goto)
-      + Make a symbolic version:
-        * Takes in program, state, symbolic execution tree, and path condition
-        * For each instruction type, update these in a different way
-        * State maps variable names to expressions
+    - rest of statements: while loops
+    - Finish a program eval function 
     - Make notation for new concepts
+    - proofs!
 *)
 
 Declare Custom Entry com.
@@ -74,7 +70,7 @@ Definition extractPathcond (n : TreeNode) : Pathcond :=
   it'll only go one level deep. *)
 Inductive ExecutionTree : Type :=
   | empty
-  | Tr (n : TreeNode) (children : list TreeNode).
+  | Tr (n : TreeNode) (children : list ExecutionTree).
 
 (** One basic instruction in the Integer language. This differs from
     the Imp implementation in Imp.v, because we don't have a
@@ -83,18 +79,19 @@ Inductive ExecutionTree : Type :=
 Inductive Statement := 
   | Assignment (x: string) (a: IntExp) (* made up of a LHS loc and a RHS expr to evaluated*)
   | If_Stmt (b: BoolExp) (c1 c2: Statement) (* evaluates to the BoolExp defined above *)
-  | Go_To. (* how do we want to define functions? do we want to limit them to be just a name with 2 int params or someting?*)
+  | Go_To (idx: nat)
+  | Loop (b: BoolExp) (stmts: list Statement). 
 
 Definition Program := list Statement.
 
 Fixpoint findStatement (prog : Program) (i : nat) : Statement :=
   match i with 
   | O => match prog with 
-    | nil => Go_To
+    | nil => Go_To 0
     | h :: t => h
   end
   | S i' => match prog with 
-    | nil => Go_To
+    | nil => Go_To 0
     | h :: t => findStatement t i'
   end
   end.
@@ -157,7 +154,20 @@ Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
     extractPathcond node = pc ->
     (findStatement prog n) = <{x := ie1}> ->
     inteval st ie1 = ie2 ->
-    node_eval prog node (Tr (Node (x !-> ie2 ; st) pc (n+1)) nil).
+    node_eval prog node (Tr node [Tr (Node (x !-> ie2 ; st) pc (n+1)) nil])
+  | E_If : forall prog node be stmt1 stmt2 st n pc,
+    extractState node = st ->
+    extractIndex node = n ->
+    extractPathcond node = pc ->
+    (findStatement prog n) = <{if be then stmt1 else stmt2 end}> ->
+    node_eval prog node (Tr node [ Tr (Node st (Pand be pc) (n+1)) nil  ;
+                          Tr (Node st (Pand (Bnot be) pc) (n+1)) nil ])
+  | E_GoTo: forall prog node i st n pc,
+    extractState node = st ->
+    extractIndex node = n ->
+    extractPathcond node = pc ->
+    (findStatement prog n) = Go_To i ->
+    node_eval prog node (Tr node [ Tr (Node st pc i) nil ]).
 
 (* TODO : Add tree evaluation relation *)
 
