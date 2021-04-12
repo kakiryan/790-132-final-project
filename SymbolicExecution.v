@@ -13,6 +13,21 @@ Import ListNotations.
     - proofs!
 *)
 
+(* 4/12/21 -- What I tried to do w/ the second half of class
+  - Started towards what you had suggested with a more assembly style approach
+  - Now there is just a conditonal statement type that takes in a condition and two nats. 
+  These are supposed to be the location of the start of the then block vs else block. 
+  (or the start of the loop body / end).
+  - Problem: having trouble finding a good way to get this index from a statement. Started a function 
+   to go through the program statement list to find the one that matches but this a bad approach bc there is no reason
+  that you cant have the same statement twice. also couldn't get it to compile so its just a dummy for now.
+  - In the notation section: had to set meaningless defaults to get it to compile. (see the empty program `p` 
+    or the default end index for loops just being 0.)
+  - also how to account for needing to recompute the conditon every time for loops with this strategy?
+  - my thought is a lot of these issues will be fixed by maybe making a program a list of statements
+  and a program counter? Just not sure how to best reflect this global pc so that we can jump around.
+*)
+
 Declare Custom Entry com.
 Declare Scope com_scope.
 
@@ -78,9 +93,9 @@ Inductive ExecutionTree : Type :=
     an ordering of statements in a list, called a Program. *)
 Inductive Statement := 
   | Assignment (x: string) (a: IntExp) (* made up of a LHS loc and a RHS expr to evaluated*)
-  | If_Stmt (b: BoolExp) (c1 c2: Statement) (* evaluates to the BoolExp defined above *)
-  | Go_To (idx: nat)
-  | Loop (b: BoolExp) (stmts: list Statement). 
+  (*TODO: once we finish the statements in the then block, how do we know to skip else? *)
+  | Cond (b: BoolExp)(then_idx: nat) (else_idx: nat)  
+  | Go_To (idx: nat). 
 
 Definition Program := list Statement.
 
@@ -96,6 +111,16 @@ Fixpoint findStatement (prog : Program) (i : nat) : Statement :=
   end
   end.
 
+
+(* This is wrong, just used to get notation & eval below to work *)
+Fixpoint findStatementIndex (prog: Program) (s: Statement) (start: nat) : nat :=
+  match prog with
+  | nil => start
+  | h :: t => match s with
+    | h => start 
+
+  end
+end.
 
 (* TODO: Find somewhere to put this (can we make a notation file?) *)
 Coercion IntId : string >-> IntExp.
@@ -128,9 +153,16 @@ Notation "x := y" :=
          (Assignment x y)
             (in custom com at level 0, x constr at level 0,
              y at level 85, no associativity) : com_scope.
-Notation "'if' x 'then' y 'else' z 'end'" :=
-         (If_Stmt x y z)  (in custom com at level 89, x at level 99,
+
+Definition p: Program := []. 
+Notation "'if' x 'then' y 'else' z 'end'" :=  
+         (Cond x (findStatementIndex p y 0)(findStatementIndex p z 0))  (in custom com at level 89, x at level 99,
             y at level 99, z at level 99) : com_scope.
+
+(*TODO: how to compute the else index for a while loop*)
+Notation "'while' x 'do' y 'end'" :=
+         (Cond x (findStatementIndex p y 0) 0 )
+            (in custom com at level 89, x at level 99, y at level 99) : com_scope.
 Reserved Notation
          "st '=[' c ']=>' st'"
          (at level 40, c custom com at level 99,
@@ -155,62 +187,29 @@ Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
     (findStatement prog n) = <{x := ie1}> ->
     inteval st ie1 = ie2 ->
     node_eval prog node (Tr node [Tr (Node (x !-> ie2 ; st) pc (n+1)) nil])
-  | E_If : forall prog node be stmt1 stmt2 st n pc,
+  | E_If : forall prog node be stmt1 stmt2 idx1 idx2 st n pc,
     extractState node = st ->
     extractIndex node = n ->
     extractPathcond node = pc ->
     (findStatement prog n) = <{if be then stmt1 else stmt2 end}> ->
-    node_eval prog node (Tr node [ Tr (Node st (Pand be pc) (n+1)) nil  ;
-                          Tr (Node st (Pand (Bnot be) pc) (n+1)) nil ])
+    node_eval prog node (Tr node [ Tr (Node st (Pand be pc) (idx1)) nil  ;
+                          Tr (Node st (Pand (Bnot be) pc) (idx2)) nil ])
   | E_GoTo: forall prog node i st n pc,
     extractState node = st ->
     extractIndex node = n ->
     extractPathcond node = pc ->
     (findStatement prog n) = Go_To i ->
-    node_eval prog node (Tr node [ Tr (Node st pc i) nil ]).
+    node_eval prog node (Tr node [ Tr (Node st pc i) nil ])
+  | E_While: forall prog node be stmt idx1 idx2 st n pc,
+    extractState node = st ->
+    extractIndex node = n ->
+    extractPathcond node = pc ->
+    (findStatement prog n) = <{while be do stmt end}> ->
+    node_eval prog node (Tr node [ Tr (Node st (Pand be pc) (idx1)) nil  ;
+                          Tr (Node st (Pand (Bnot be) pc) (idx2)) nil ]).
 
 (* TODO : Add tree evaluation relation *)
-
-Definition W : string := "W".
-Definition X : string := "X".
-Definition Y : string := "Y".
-Definition Z : string := "Z".
 
 Definition empty_st := (_ !-> 0).
 
 Notation "x '!->' v" := (x !-> v ; empty_st) (at level 100).
-
-(* Fixpoint eval_BoolExp (s: state) (be : BoolExp) : bool :=
-  match be with
-  | BTrue => true
-  | BFalse => false
-  | Band b1 b2 => (eval_BoolExp b1) && (eval_BoolExp b2)
-  | Bor b1 b2 => (eval_BoolExp b1) || (eval_BoolExp b2)
-  | Bnot b => negb (eval_BoolExp b)
-  | Bge0 n => Z.leb 0 (inteval s n)
-  end.
-
-Fixpoint eval_pathcond (p : pathcond) : bool :=
-  match p with
-  | none       => true
-  | Pand be p' => (eval_BoolExp be) && (eval_pathcond p')
-  end.
-*)
-
-
-  (** TODO: Defining the Integer language.
-  - exlusively signed ints
-  - simple assigns
-  - if Statements with then/else
-  - go-to labels
-  - way to get inputs (e.g. procedure parameters, global variables, read operations). 
-  - arithmetic expr: +, -, x
-  - bool expr: >= 0 only *)
-
-(** TODO: Just brainstorming adding notes -- 3/23/21
-  - function to visit  each variable in the value store associated with
- execution state and make symbolic
-  - Inductive Statement type? Starting below 
-  - in Vol 3 ADT Chapter -- Table type would be good for name/symbol mappings.
- - *)
-
