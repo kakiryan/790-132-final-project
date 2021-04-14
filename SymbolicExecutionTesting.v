@@ -69,11 +69,6 @@ Definition extractState (n : TreeNode) : state :=
   | Node s _ _ => s
   end.
 
-Definition extractIndex (n : TreeNode) : nat :=
-  match n with 
-  | Node _ _ i => i
-  end.
-
 Definition extractPathcond (n : TreeNode) : Pathcond :=
   match n with 
   | Node _ pc _ => pc
@@ -91,36 +86,28 @@ Inductive ExecutionTree : Type :=
     the Imp implementation in Imp.v, because we don't have a
     statement of the form [stmt1 ; stmt2]. Instead, we maintain
     an ordering of statements in a list, called a Program. *)
+
+(** We will design our notation such that the first argument of a Seq Statement
+    is never another Seq. *)
 Inductive Statement := 
   | Assignment (x: string) (a: IntExp) (* made up of a LHS loc and a RHS expr to evaluated*)
   (*TODO: once we finish the statements in the then block, how do we know to skip else? *)
-  | Cond (b: BoolExp) (then_idx: nat) (else_idx: nat)  
-  | Go_To (idx: nat). 
+  | Seq (s1 s2: Statement)
+  | If (be: BoolExp) (s1 s2: Statement)
+  | While (be: BoolExp) (s: Statement)
+  | Go_To (idx: nat).
 
-Definition Program := list Statement.
-
-Fixpoint findStatement (prog : Program) (i : nat) : Statement :=
+Fixpoint findStatement (s: Statement) (i : nat) : Statement :=
   match i with 
-  | O => match prog with 
-    | nil => Go_To 0
-    | h :: t => h
-  end
-  | S i' => match prog with 
-    | nil => Go_To 0
-    | h :: t => findStatement t i'
-  end
+  | O => match s with
+    | Seq s1 s2 => s1
+    | _ => s
+    end
+  | S i' => match s with 
+    | Seq s1 s2 => findStatement s2 i' 
+    | _ => s (* The index passed in is too high if this case applies. *)
+   end
   end.
-
-
-(* This is wrong, just used to get notation & eval below to work *)
-Fixpoint findStatementIndex (prog: Program) (s: Statement) (start: nat) : nat :=
-  match prog with
-  | nil => start
-  | h :: t => match s with
-    | h => start 
-
-  end
-end.
 
 (* TODO: Find somewhere to put this (can we make a notation file?) *)
 Coercion IntId : string >-> IntExp.
@@ -150,19 +137,23 @@ Notation "x || y" := (Bor x y)
 Notation "'~' b"  := (Bnot b)
   (in custom com at level 75, right associativity).
 Notation "x := y" :=
-         (Assignment x y)
-            (in custom com at level 0, x constr at level 0,
-             y at level 85, no associativity) : com_scope.
-
-Definition p: Program := []. 
-Notation "'if' x 'then' y 'else' z 'end'" :=  
-         (Cond x (findStatementIndex p y 0)(findStatementIndex p z 0))  (in custom com at level 89, x at level 99,
-            y at level 99, z at level 99) : com_scope.
-
+  (Assignment x y)
+    (in custom com at level 0, x constr at level 0,
+      y at level 85, no associativity) : com_scope.
+Notation "x ; y" :=
+(Seq x y)
+  (in custom com at level 90, right associativity) : com_scope.
+Notation "'if' x 'then' y 'else' z 'end'" :=
+  (If x y z)
+    (in custom com at level 89, x at level 99,
+      y at level 99, z at level 99) : com_scope.
 (*TODO: how to compute the else index for a while loop*)
 Notation "'while' x 'do' y 'end'" :=
-         (Cond x (findStatementIndex p y 0) 0 )
-            (in custom com at level 89, x at level 99, y at level 99) : com_scope.
+  (While x y)
+    (in custom com at level 89, x at level 99, y at level 99) : com_scope.
+Notation "'goto' x" :=
+  (Go_To x)
+    (in custom com at level 0) : com_scope.
 Reserved Notation
          "st '=[' c ']=>' st'"
          (at level 40, c custom com at level 99,
@@ -179,7 +170,7 @@ Fixpoint inteval (s : state) (ie : IntExp) : IntExp :=
   end.
 
 (* TODO : Add other instruction types *)
-Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
+Inductive node_eval : Statement -> TreeNode -> ExecutionTree -> Prop :=
   | E_Assign : forall prog node x ie1 ie2 st n pc,
     extractState node = st ->
     extractIndex node = n ->
