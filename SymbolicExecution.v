@@ -101,7 +101,8 @@ Inductive Statement :=
   | Assignment (x: string) (a: IntExp) 
   | If (b: BoolExp) (then_block: list Statement) (else_then: list Statement)
   | While (b: BoolExp) (body: list Statement)
-  | Go_To (idx: nat). 
+  | Go_To (idx: nat)
+  | Finish.
 
 
 (** As mentioned above, each program is represented as a list of statements. **)
@@ -152,6 +153,7 @@ Fixpoint findStatement (prog : Program) (i : nat) : Statement :=
          | false => findStatement body i'
         end
       | Go_To j => findStatement t i'
+      | Finish => Finish (* bogus *)
     end
   end
 end.
@@ -200,9 +202,9 @@ Reserved Notation
          "st '=[' c ']=>' st'"
          (at level 40, c custom com at level 99,
           st constr, st' constr at next level).
-Definition empty_st := (_ !-> 0).
+Definition empty_st := (_ !-> (IntLit 0)).
 
-Notation "x '!->' v" := (x !-> v ; empty_st) (at level 100).
+(* Notation "x '!->' v" := (x !-> v ; empty_st) (at level 100). *)
 Open Scope com_scope. 
 
 (* Inspired by Imp's aeval. *)
@@ -237,33 +239,43 @@ Fixpoint inteval (s : state) (ie : IntExp) : IntExp :=
     condition is true and one for if it is false.
 *)
 Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
-  | E_Assign : forall prog node x ie1 ie2 st n pc,
+  | E_Assign : forall prog node x ie1 ie2 st n pc tree',
     extractState node = st ->
     extractIndex node = n ->
     extractPathcond node = pc ->
     (findStatement prog n) = <{x := ie1}> ->
     inteval st ie1 = ie2 ->
-    node_eval prog node (Tr node [Tr (Node (x !-> ie2 ; st) pc (n+1)) nil])
-  | E_If : forall prog node be then_body else_body st n pc,
+    node_eval prog (Node (x !-> ie2 ; st) pc (n+1)) tree' ->
+    node_eval prog node (Tr node [tree'])
+  | E_If : forall prog node be then_body else_body st n pc tree1' tree2',
     extractState node = st ->
     extractIndex node = n ->
     extractPathcond node = pc ->
     (findStatement prog n) = <{if be then then_body else else_body end}> ->
-    node_eval prog node (Tr node [ Tr (Node st (Pand be pc) (n+1)) nil  ;
-                          Tr (Node st (Pand (Bnot be) pc) (n + (length then_body))) nil ])
-  | E_GoTo: forall prog node i st n pc,
+    node_eval prog (Node st (Pand be pc) (n+1)) tree1' ->
+    node_eval prog (Node st (Pand (Bnot be) pc) (n + (length then_body))) tree2' ->
+    node_eval prog node (Tr node [tree1' ; tree2'])
+  | E_GoTo: forall prog node i st n pc tree',
     extractState node = st ->
     extractIndex node = n ->
     extractPathcond node = pc ->
     (findStatement prog n) = <{go_to i}> ->
-    node_eval prog node (Tr node [ Tr (Node st pc i) nil ])
-  | E_While: forall prog node be body st n pc,
+    node_eval prog (Node st pc i) tree' ->
+    node_eval prog node (Tr node [tree'])
+  | E_While: forall prog node be body st n pc tree1' tree2',
     extractState node = st ->
     extractIndex node = n ->
     extractPathcond node = pc ->
     (findStatement prog n) = <{while be do body end}> ->
-    node_eval prog node (Tr node [ Tr (Node st (Pand be pc) (n + 1)) nil  ;
-                          Tr (Node st (Pand (Bnot be) pc) (n + (length body))) nil ]).
+    node_eval prog (Node st (Pand be pc) (n + 1)) tree1' ->
+    node_eval prog (Node st (Pand (Bnot be) pc) (n + (length body))) tree1' ->
+    node_eval prog node (Tr node [tree1' ; tree2'])
+  | E_Finish: forall prog node st n pc,
+    extractState node = st ->
+    extractIndex node = n ->
+    extractPathcond node = pc ->
+    (findStatement prog n) = Finish ->
+    node_eval prog node (Tr node [empty]).
 
 (* TODO : Add tree evaluation relation *)
 
@@ -276,7 +288,22 @@ Definition Y: string := "Y".
 Definition Z: string := "Z".
 Definition prog_1 := [<{X := A + B}>; 
                       <{Y := B + C}>; 
-                      <{Z := X + Y - B}>].
+                      <{Z := X + Y - B}>;
+                      Finish].
+
+Example prog_1_eval :
+  node_eval prog_1 (Node empty_st none 0)
+    (Tr (Node empty_st none 0) [(
+      Tr (Node (X !-> <{A + B}> ; empty_st) none 1) [(
+        Tr (Node (Y !-> <{B + C}> ; X !-> <{A + B}> ; empty_st) none 2) [(
+          Tr (Node (Z !-> <{X + Y - B}> ; Y !-> <{B + C}> ;
+                    X !-> <{A + B}> ; empty_st) none 3) nil
+    )])])]).
+Proof.
+  apply E_Assign with (x := X) (ie1 := <{A + B}>) (ie2 := <{A + B}>)
+                      (st := empty_st) (n := O) (pc := none); try reflexivity.
+  - simpl.
+  
 
 Definition stmt1 := findStatement prog_1 0.
 Compute stmt1.
