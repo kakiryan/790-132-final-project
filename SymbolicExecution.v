@@ -7,26 +7,12 @@ From Coq Require Import Lists.List.
 Import ListNotations.
 
 (** TODO: 
-    - rest of statements: while loops
     - Finish a program eval function 
-    - Make notation for new concepts
-    - proofs!
+    - comments
+    - add some examples (perhaps from paper)
+    - proofs!!!!!!!
 *)
 
-(* 4/12/21 -- What I tried to do w/ the second half of class
-  - Started towards what you had suggested with a more assembly style approach
-  - Now there is just a conditonal statement type that takes in a condition and two nats. 
-  These are supposed to be the location of the start of the then block vs else block. 
-  (or the start of the loop body / end).
-  - Problem: having trouble finding a good way to get this index from a statement. Started a function 
-   to go through the program statement list to find the one that matches but this a bad approach bc there is no reason
-  that you cant have the same statement twice. also couldn't get it to compile so its just a dummy for now.
-  - In the notation section: had to set meaningless defaults to get it to compile. (see the empty program `p` 
-    or the default end index for loops just being 0.)
-  - also how to account for needing to recompute the conditon every time for loops with this strategy?
-  - my thought is a lot of these issues will be fixed by maybe making a program a list of statements
-  and a program counter? Just not sure how to best reflect this global pc so that we can jump around.
-*)
 
 Declare Custom Entry com.
 Declare Scope com_scope.
@@ -93,8 +79,8 @@ Inductive ExecutionTree : Type :=
     an ordering of statements in a list, called a Program. *)
 Inductive Statement := 
   | Assignment (x: string) (a: IntExp) (* made up of a LHS loc and a RHS expr to evaluated*)
-  (*TODO: once we finish the statements in the then block, how do we know to skip else? *)
-  | Cond (b: BoolExp) (then_idx: nat) (else_idx: nat)  
+  | If (b: BoolExp) (then_block: list Statement) (else_then: list Statement)
+  | While (b: BoolExp) (body: list Statement)
   | Go_To (idx: nat). 
 
 Definition Program := list Statement.
@@ -107,20 +93,24 @@ Fixpoint findStatement (prog : Program) (i : nat) : Statement :=
   end
   | S i' => match prog with 
     | nil => Go_To 0
-    | h :: t => findStatement t i'
-  end
-  end.
-
-
-(* This is wrong, just used to get notation & eval below to work *)
-Fixpoint findStatementIndex (prog: Program) (s: Statement) (start: nat) : nat :=
-  match prog with
-  | nil => start
-  | h :: t => match s with
-    | h => start 
-
+    | h :: t => match h with
+      | Assignment x a => findStatement t i'
+      | If b th e => match leb (length th) i' with
+         | true => match leb ((length th) + (length e)) i' with
+           | true => findStatement t (i' - (length th) - (length e))
+           | false => findStatement e (i' - (length th))
+           end 
+         | false => findStatement th i'
+        end
+      | While b body => match leb (length body) i' with
+         | true => findStatement t (i' - (length body))
+         | false => findStatement body i'
+        end
+      | Go_To j => findStatement t i'
+    end
   end
 end.
+
 
 (* TODO: Find somewhere to put this (can we make a notation file?) *)
 Coercion IntId : string >-> IntExp.
@@ -154,15 +144,13 @@ Notation "x := y" :=
             (in custom com at level 0, x constr at level 0,
              y at level 85, no associativity) : com_scope.
 
-Definition p: Program := []. 
-Notation "'if' x 'then' y 'else' z 'end'" :=  
-         (Cond x (findStatementIndex p y 0)(findStatementIndex p z 0))  (in custom com at level 89, x at level 99,
-            y at level 99, z at level 99) : com_scope.
-
-(*TODO: how to compute the else index for a while loop*)
-Notation "'while' x 'do' y 'end'" :=
-         (Cond x (findStatementIndex p y 0) 0 )
-            (in custom com at level 89, x at level 99, y at level 99) : com_scope.
+Notation "'if' b 'then' then_body 'else' else_body 'end'" :=
+         (If b then_body else_body)
+           (in custom com at level 89, b at level 99,
+            then_body at level 99, else_body at level 99) : com_scope.
+Notation "'while' b 'do' body 'end'" :=
+         (While b body)
+            (in custom com at level 89, b at level 99, body at level 99) : com_scope.
 Reserved Notation
          "st '=[' c ']=>' st'"
          (at level 40, c custom com at level 99,
@@ -178,7 +166,6 @@ Fixpoint inteval (s : state) (ie : IntExp) : IntExp :=
   | IntId n => s n
   end.
 
-(* TODO : Add other instruction types *)
 Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
   | E_Assign : forall prog node x ie1 ie2 st n pc,
     extractState node = st ->
@@ -187,26 +174,26 @@ Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
     (findStatement prog n) = <{x := ie1}> ->
     inteval st ie1 = ie2 ->
     node_eval prog node (Tr node [Tr (Node (x !-> ie2 ; st) pc (n+1)) nil])
-  | E_If : forall prog node be stmt1 stmt2 idx1 idx2 st n pc,
+  | E_If : forall prog node be then_body else_body st n pc,
     extractState node = st ->
     extractIndex node = n ->
     extractPathcond node = pc ->
-    (findStatement prog n) = <{if be then stmt1 else stmt2 end}> ->
-    node_eval prog node (Tr node [ Tr (Node st (Pand be pc) (idx1)) nil  ;
-                          Tr (Node st (Pand (Bnot be) pc) (idx2)) nil ])
+    (findStatement prog n) = <{if be then then_body else else_body end}> ->
+    node_eval prog node (Tr node [ Tr (Node st (Pand be pc) (n+1)) nil  ;
+                          Tr (Node st (Pand (Bnot be) pc) (n + (length then_body))) nil ])
   | E_GoTo: forall prog node i st n pc,
     extractState node = st ->
     extractIndex node = n ->
     extractPathcond node = pc ->
     (findStatement prog n) = Go_To i ->
     node_eval prog node (Tr node [ Tr (Node st pc i) nil ])
-  | E_While: forall prog node be stmt idx1 idx2 st n pc,
+  | E_While: forall prog node be body st n pc,
     extractState node = st ->
     extractIndex node = n ->
     extractPathcond node = pc ->
-    (findStatement prog n) = <{while be do stmt end}> ->
-    node_eval prog node (Tr node [ Tr (Node st (Pand be pc) (idx1)) nil  ;
-                          Tr (Node st (Pand (Bnot be) pc) (idx2)) nil ]).
+    (findStatement prog n) = <{while be do body end}> ->
+    node_eval prog node (Tr node [ Tr (Node st (Pand be pc) (n + 1)) nil  ;
+                          Tr (Node st (Pand (Bnot be) pc) (n + (length body))) nil ]).
 
 (* TODO : Add tree evaluation relation *)
 
