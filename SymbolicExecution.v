@@ -29,11 +29,6 @@ Inductive IntExp : Type :=
 | IntId (x : string)
 | Symbolic (x: string).
 
-
-Inductive SymbolicIntExp: Type :=
- | Symbol (x: string)
- | SymExpr (n: IntExp). 
-
 (* Also inspired by the BExp from Imp.*)
 Inductive BoolExp : Type :=
   | BTrue
@@ -222,14 +217,8 @@ Fixpoint inteval (s : state) (ie : IntExp) : IntExp :=
   | <{n1 - n2}> => <{(inteval s n1) - (inteval s n2)}>
   | <{n1 * n2}> =>  <{(inteval s n1) * (inteval s n2)}>
   | IntId n => s n
-  | Symbolic n => n
+  | Symbolic n => Symbolic n
   end.
-
-Fixpoint symbolic_eval (s: state) (se: SymbolicIntExp) : SymbolicIntExp :=
-  match se with
-  | Symbol n => Symbol n
-  | SymExpr ie => Symbol "(inteval s ie)"
-end.
 
 (** The following relates our representation of a program, individual nodes and full execution trees.
     We will explain case by case what is happening below:
@@ -289,7 +278,7 @@ Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
     extractIndex node = n ->
     extractPathcond node = pc ->
     (findStatement prog n) = Finish ->
-    node_eval prog node (Tr node [empty]).
+    node_eval prog node (Tr node []).
 
 (* TODO : Add tree evaluation relation *)
 
@@ -300,15 +289,21 @@ Definition C: string := "C".
 Definition X: string := "X".
 Definition Y: string := "Y".
 Definition Z: string := "Z".
-Definition prog_1 := [<{X := A + B}>; 
-                      <{Y := B + C}>; 
-                      <{Z := X + Y - B}>;
+
+Definition A_plus_B: string := "A + B".
+Definition B_plus_C: string := "B + C".
+Definition X_plus_Y: string := "X + Y - B".
+Definition prog_1 := [<{X := sym A_plus_B}>; 
+                      <{Y := sym B_plus_C}>; 
+                      <{Z := sym X_plus_Y}>;
                       Finish].
+
+Check Coq.Init.Nat.one.
 
 Example prog_1_eval :
   node_eval prog_1 (Node empty_st none 0)
     (Tr (Node empty_st none 0) [(
-      Tr (Node (X !->  "A + B" ; empty_st) none 1) [(
+      Tr (Node (X !-> Symbolic "A + B" ; empty_st) none 1) [(
         Tr (Node (Y !-> Symbolic "B + C" ; X !-> Symbolic "A + B" ; empty_st) none 2) [(
           Tr (Node (Z !-> Symbolic "X + Y - B" ; Y !-> Symbolic "B + C" ;
                     X !-> Symbolic "A + B" ; empty_st) none 3) nil
@@ -316,8 +311,12 @@ Example prog_1_eval :
 Proof.
   apply E_Assign with (x := X) (ie1 := Symbolic "A + B") (ie2 := Symbolic "A + B")
                       (st := empty_st) (n := O) (pc := none); try reflexivity.
-  - simpl. reflexivity.
-  
+  - try simpl. apply E_Assign with (x := Y) (ie1 := Symbolic "B + C") (ie2 := Symbolic "B + C")
+                      (st := X !-> Symbolic "A + B"; empty_st) (n := S O) (pc := none); try reflexivity.
+    * try simpl. apply E_Assign with (x := Z) (ie1 := Symbolic "X + Y - B") (ie2 := Symbolic "X + Y - B")
+                      (st := Y !-> Symbolic "B + C"; X !-> Symbolic "A + B"; empty_st) (n := S (S O)) (pc := none); try reflexivity.
+      --  try simpl. apply E_Finish with (st := Z !-> Symbolic "X + Y - B"; Y !-> Symbolic "B + C"; X !-> Symbolic "A + B"; empty_st) (n := S (S(S O))) (pc := none); try reflexivity.
+Qed. 
 
 Definition stmt1 := findStatement prog_1 0.
 Compute stmt1.
