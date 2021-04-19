@@ -17,6 +17,10 @@ Import ListNotations.
 Declare Custom Entry com.
 Declare Scope com_scope.
 
+(** Inspired by the AExp from the Imp chapter. The only difference is that 
+we are using the built-in integer type, Z. The Integer language as defined in
+the King paper only provides support for addition, subtraction and multiplcation, too.
+*)
 Inductive IntExp : Type :=
 | IntLit (n : Z)
 | IntAdd (n1 n2: IntExp)
@@ -24,6 +28,7 @@ Inductive IntExp : Type :=
 | IntMult (n1 n2: IntExp)
 | IntId (x : string).
 
+(* Also inspired by the BExp from Imp.*)
 Inductive BoolExp : Type :=
   | BTrue
   | BFalse
@@ -32,10 +37,10 @@ Inductive BoolExp : Type :=
   | Bnot (b : BoolExp)
   | Bge0 (n : IntExp).
 
+(* We represent a program state as a map of integer expressions and symbolic values. *)
 Definition state := total_map IntExp.
 
-  (** TODO: We want a path condition to be a list of conditions on
-    symbolic variables, which isn't reflected here. *)
+(* A path condition is built up of a series of boolean expressions. *)
 Inductive Pathcond : Type :=
 | none
 | Pand (be : BoolExp) (p : Pathcond).
@@ -43,7 +48,7 @@ Inductive Pathcond : Type :=
 
 (** A TreeNode represents one node of our symbolic execution tree.
     It contains a program state, path condition, and an index
-    into the program. The index points to a particular instruction.
+    into the program. The index points to a particular statement.
 *)
 Inductive TreeNode : Type :=
   | Node (s : state) (pc : Pathcond) (index : nat).
@@ -76,15 +81,55 @@ Inductive ExecutionTree : Type :=
 (** One basic instruction in the Integer language. This differs from
     the Imp implementation in Imp.v, because we don't have a
     statement of the form [stmt1 ; stmt2]. Instead, we maintain
-    an ordering of statements in a list, called a Program. *)
+    an ordering of statements in a list, called a Program. 
+
+    In addition to basic assignment, we provide support for the same control 
+    flow structures as in the original paper -- if/else, while loops, and function calls modeled by
+    go_tos.
+
+    -`Assignment` statements require a variable name (string) and an integer expression.
+    The value of this variable is updated in the program state.
+
+    -`If` statements are presented by a boolean expression for the condition
+    and a then_block and an else_block. Both of these blocks are represented as lists of statements.
+
+    -`While` loops are similarlly reprsented by a boolean expression and a list of body statements.
+
+    -`Go_To` statements contain the index of the statement we would like to jump to.
+*)
 Inductive Statement := 
-  | Assignment (x: string) (a: IntExp) (* made up of a LHS loc and a RHS expr to evaluated*)
+  | Assignment (x: string) (a: IntExp) 
   | If (b: BoolExp) (then_block: list Statement) (else_then: list Statement)
   | While (b: BoolExp) (body: list Statement)
   | Go_To (idx: nat). 
 
+
+(** As mentioned above, each program is represented as a list of statements. **)
 Definition Program := list Statement.
 
+(** From any point in our program, we need to know where to go next, or what 
+    statement is the next to be executed. This is useful in the node_eval relation 
+    below. 
+    
+    This function takes in a program, or list of statements, and an index. This index
+    is the location of the statement in our program that we would like to execute next.
+    
+    If the index parameter is 0, we can just return what is at the head of our list. We 
+    just want to execute the current statement. If the index is not 0, we must recursively
+    traverse our program until we arrive at the desired location, and return that statement.
+
+    For Assignment statements and Go_Tos, this is straightforward.
+
+    For conditonal statements, If and While, the calculation is a bit more involved. 
+    The key to being able to make this work for a hierarchical program of nested lists of statements
+    is traversing the program as if the lists were flattened. 
+    So for example, if our program has an If statement at index 2 with two statements in the then block 
+    and two in the else block, the indices of the then block would be 3, 4 and the else block would be 5, 6.
+
+    Under this model, we can calculate the offsets into our `then` (th) and `else` (e) lists by simple operations
+    over the lengths of the lists. For example, if the desired index is greater than the length of the then block,
+    we know the desired statement is either in the else block or outside of the if/else statement entirely.
+*)
 Fixpoint findStatement (prog : Program) (i : nat) : Statement :=
   match i with 
   | O => match prog with 
@@ -112,7 +157,7 @@ Fixpoint findStatement (prog : Program) (i : nat) : Statement :=
 end.
 
 
-(* TODO: Find somewhere to put this (can we make a notation file?) *)
+(* The following notation is inspired by Imp with some minor modifications.*)
 Coercion IntId : string >-> IntExp.
 Coercion IntLit : Z >-> IntExp.
 Notation "<{ e }>" := e (at level 0, e custom com at level 99) : com_scope.
@@ -143,7 +188,6 @@ Notation "x := y" :=
          (Assignment x y)
             (in custom com at level 0, x constr at level 0,
              y at level 85, no associativity) : com_scope.
-
 Notation "'if' b 'then' then_body 'else' else_body 'end'" :=
          (If b then_body else_body)
            (in custom com at level 89, b at level 99,
@@ -151,12 +195,17 @@ Notation "'if' b 'then' then_body 'else' else_body 'end'" :=
 Notation "'while' b 'do' body 'end'" :=
          (While b body)
             (in custom com at level 89, b at level 99, body at level 99) : com_scope.
+Notation "'go_to' x" := (Go_To x) (in custom com at level 89, x at level 99) : com_scope.
 Reserved Notation
          "st '=[' c ']=>' st'"
          (at level 40, c custom com at level 99,
           st constr, st' constr at next level).
+Definition empty_st := (_ !-> 0).
+
+Notation "x '!->' v" := (x !-> v ; empty_st) (at level 100).
 Open Scope com_scope. 
 
+(* Inspired by Imp's aeval. *)
 Fixpoint inteval (s : state) (ie : IntExp) : IntExp :=
   match ie with
   | IntLit n => IntLit n
@@ -166,6 +215,27 @@ Fixpoint inteval (s : state) (ie : IntExp) : IntExp :=
   | IntId n => s n
   end.
 
+(** The following relates our representation of a program, individual nodes and full execution trees.
+    We will explain case by case what is happening below:
+
+    E_Assign: Given some assignment statement and tree node with some state, pc and index, 
+    The resultant ExecutionTree is a single node with an updated state to reflect the assingment operation.
+    The index is incremented by one since there is no branching happening at this step.
+
+    E_If: Given some if statement and tree node with some state, pc and index, the resultant ExecutionTree is 
+    a made up of two nodes, one for the case the boolean condition is true and the other for false. 
+    In the true case, we add that condition to the path condition and the index increase by one to enter the then block's
+    list of statements. 
+    In the false case, we add the negation of the boolean condition and the index is the current index + the length of
+    the then block's list of statements. We are able to compute the indices this way because of how we have implemented
+    findStatment above.
+
+    E_GoTo: Given some index, the resultant tree is a single node whose index is specified by the argument given to the 
+    Go_To constructor.
+
+    E_While: Similar to the If statement, the resultant ExecutionTree has two nodes. One for the case that the boolean
+    condition is true and one for if it is false.
+*)
 Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
   | E_Assign : forall prog node x ie1 ie2 st n pc,
     extractState node = st ->
@@ -185,7 +255,7 @@ Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
     extractState node = st ->
     extractIndex node = n ->
     extractPathcond node = pc ->
-    (findStatement prog n) = Go_To i ->
+    (findStatement prog n) = <{go_to i}> ->
     node_eval prog node (Tr node [ Tr (Node st pc i) nil ])
   | E_While: forall prog node be body st n pc,
     extractState node = st ->
@@ -197,6 +267,38 @@ Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
 
 (* TODO : Add tree evaluation relation *)
 
-Definition empty_st := (_ !-> 0).
+(** See figure 1 of King paper. This is the sum procedure. Question -- do we want a return statement?*)
+Definition A: string := "A".
+Definition B: string := "B".
+Definition C: string := "C".
+Definition X: string := "X".
+Definition Y: string := "Y".
+Definition Z: string := "Z".
+Definition prog_1 := [<{X := A + B}>; 
+                      <{Y := B + C}>; 
+                      <{Z := X + Y - B}>].
 
-Notation "x '!->' v" := (x !-> v ; empty_st) (at level 100).
+Definition stmt1 := findStatement prog_1 0.
+Compute stmt1.
+Definition stmt2 := findStatement prog_1 1.
+Compute stmt2.
+
+Definition starting_node := Node empty_st none 1. 
+Check node_eval prog_1 starting_node.
+
+(** Not in paper, but just trying some simple if/else. *)
+Definition prog_2 := [<{X := 2}>; 
+                      <{if X >= 0
+                        then [<{X := 3}>;
+                              <{Y := 4}>]
+                        else [<{X := 4}>;
+                              <{Y := 5}>]
+                        end}>].
+
+Definition stmt2_1 := findStatement prog_2 0.
+Compute stmt2_1.
+Definition stmt2_then := findStatement prog_2 2.
+Compute stmt2_then.
+Definition stmt2_else := findStatement prog_2 5.
+Compute stmt2_else.
+
