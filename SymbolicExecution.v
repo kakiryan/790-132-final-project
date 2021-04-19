@@ -26,7 +26,13 @@ Inductive IntExp : Type :=
 | IntAdd (n1 n2: IntExp)
 | IntSub (n1 n2: IntExp)
 | IntMult (n1 n2: IntExp)
-| IntId (x : string).
+| IntId (x : string)
+| Symbolic (x: string).
+
+
+Inductive SymbolicIntExp: Type :=
+ | Symbol (x: string)
+ | SymExpr (n: IntExp). 
 
 (* Also inspired by the BExp from Imp.*)
 Inductive BoolExp : Type :=
@@ -187,7 +193,7 @@ Notation "x || y" := (Bor x y)
 Notation "'~' b"  := (Bnot b)
   (in custom com at level 75, right associativity).
 Notation "x := y" :=
-         (Assignment x y)
+         (Assignment x  y)
             (in custom com at level 0, x constr at level 0,
              y at level 85, no associativity) : com_scope.
 Notation "'if' b 'then' then_body 'else' else_body 'end'" :=
@@ -198,6 +204,7 @@ Notation "'while' b 'do' body 'end'" :=
          (While b body)
             (in custom com at level 89, b at level 99, body at level 99) : com_scope.
 Notation "'go_to' x" := (Go_To x) (in custom com at level 89, x at level 99) : com_scope.
+Notation "'sym' n" := (Symbolic n) (in custom com at level 89, n at level 99) : com_scope.
 Reserved Notation
          "st '=[' c ']=>' st'"
          (at level 40, c custom com at level 99,
@@ -215,7 +222,14 @@ Fixpoint inteval (s : state) (ie : IntExp) : IntExp :=
   | <{n1 - n2}> => <{(inteval s n1) - (inteval s n2)}>
   | <{n1 * n2}> =>  <{(inteval s n1) * (inteval s n2)}>
   | IntId n => s n
+  | Symbolic n => n
   end.
+
+Fixpoint symbolic_eval (s: state) (se: SymbolicIntExp) : SymbolicIntExp :=
+  match se with
+  | Symbol n => Symbol n
+  | SymExpr ie => Symbol "(inteval s ie)"
+end.
 
 (** The following relates our representation of a program, individual nodes and full execution trees.
     We will explain case by case what is happening below:
@@ -294,15 +308,15 @@ Definition prog_1 := [<{X := A + B}>;
 Example prog_1_eval :
   node_eval prog_1 (Node empty_st none 0)
     (Tr (Node empty_st none 0) [(
-      Tr (Node (X !-> <{A + B}> ; empty_st) none 1) [(
-        Tr (Node (Y !-> <{B + C}> ; X !-> <{A + B}> ; empty_st) none 2) [(
-          Tr (Node (Z !-> <{X + Y - B}> ; Y !-> <{B + C}> ;
-                    X !-> <{A + B}> ; empty_st) none 3) nil
+      Tr (Node (X !->  "A + B" ; empty_st) none 1) [(
+        Tr (Node (Y !-> Symbolic "B + C" ; X !-> Symbolic "A + B" ; empty_st) none 2) [(
+          Tr (Node (Z !-> Symbolic "X + Y - B" ; Y !-> Symbolic "B + C" ;
+                    X !-> Symbolic "A + B" ; empty_st) none 3) nil
     )])])]).
 Proof.
-  apply E_Assign with (x := X) (ie1 := <{A + B}>) (ie2 := <{A + B}>)
+  apply E_Assign with (x := X) (ie1 := Symbolic "A + B") (ie2 := Symbolic "A + B")
                       (st := empty_st) (n := O) (pc := none); try reflexivity.
-  - simpl.
+  - simpl. reflexivity.
   
 
 Definition stmt1 := findStatement prog_1 0.
