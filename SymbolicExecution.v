@@ -26,8 +26,14 @@ Inductive IntExp : Type :=
 | IntAdd (n1 n2: IntExp)
 | IntSub (n1 n2: IntExp)
 | IntMult (n1 n2: IntExp)
-| IntId (x : string)
-| Symbolic (x: string).
+| IntId (x : string).
+
+Inductive SymbolicExp : Type :=
+  | Symbol (s: string)
+  | SymAdd (s1 s2: SymbolicExp)
+  | SymSub (s1 s2: SymbolicExp)
+  | SymMult (s1 s2: SymbolicExp)
+  | Constant (n : Z).
 
 (* Also inspired by the BExp from Imp.*)
 Inductive BoolExp : Type :=
@@ -39,12 +45,50 @@ Inductive BoolExp : Type :=
   | Bge0 (n : IntExp).
 
 (* We represent a program state as a map of integer expressions and symbolic values. *)
-Definition state := total_map IntExp.
+Definition state := total_map SymbolicExp.
 
 (* A path condition is built up of a series of boolean expressions. *)
 Inductive Pathcond : Type :=
 | none
 | Pand (be : BoolExp) (p : Pathcond).
+
+Fixpoint substitute (se: SymbolicExp) (mappings: total_map Z): Z  :=
+  match se with
+  | Symbol s => mappings s
+  | SymAdd s1 s2 => (substitute s1 mappings) + (substitute s2 mappings)
+  | SymSub s1 s2 => (substitute s1 mappings) - (substitute s2 mappings)
+  | SymMult s1 s2 => (substitute s1 mappings) * (substitute s2 mappings)
+  | Constant n => n
+  end.
+
+Fixpoint inteval (ie: IntExp) (s: state) (mappings: total_map Z) : Z :=
+  match ie with 
+  | IntLit n => n
+  | IntAdd n1 n2 => (inteval n1 s mappings) + (inteval n2 s mappings)
+  | IntSub n1 n2 => (inteval n1 s mappings) - (inteval n2 s mappings)
+  | IntMult n1 n2 => (inteval n1 s mappings) * (inteval n2 s mappings)
+  | IntId x => substitute (s x) mappings
+end.
+
+Fixpoint beval (b : bexp) : bool :=
+  match b with
+  | BTrue       => true
+  | BFalse      => false
+  | BEq a1 a2   => (aeval a1) =? (aeval a2)
+  | BLe a1 a2   => (aeval a1) <=? (aeval a2)
+  | BNot b1     => negb (beval b1)
+  | BAnd b1 b2  => andb (beval b1) (beval b2)
+  end.
+
+Fixpoint eval_pc (pc: Pathcond) (a b c d e: Z)  : bool :=
+  match pc with 
+  | none => true
+  | Pand be p => match be with
+                | BTrue => true
+                | BFalse => false
+                | Band b1 b2 => 
+
+Definition SAT pc := exists sA, sB, sC, sD, sE : SymbolicExp, x = double n.
 
 
 (** A TreeNode represents one node of our symbolic execution tree.
@@ -163,6 +207,7 @@ end.
 (* The following notation is inspired by Imp with some minor modifications.*)
 Coercion IntId : string >-> IntExp.
 Coercion IntLit : Z >-> IntExp.
+Coercion Symbol : string >-> SymbolicExp.
 Notation "<{ e }>" := e (at level 0, e custom com at level 99) : com_scope.
 Notation "( x )" := x (in custom com, x at level 99) : com_scope.
 Notation "x" := x (in custom com at level 0, x constr at level 0) : com_scope.
@@ -175,6 +220,12 @@ Notation "x + y" := (IntAdd x y)
 Notation "x - y" := (IntSub x y)
   (in custom com at level 50, left associativity).
 Notation "x * y" := (IntMult x y)
+  (in custom com at level 40, left associativity).
+Notation "x s+ y" := (SymAdd x y)
+  (in custom com at level 50, left associativity).
+Notation "x s- y" := (SymSub x y)
+  (in custom com at level 50, left associativity).
+Notation "x s* y" := (SymMult x y)
   (in custom com at level 40, left associativity).
 Notation "'true'"  := true (at level 1).
 Notation "'true'"  := BTrue (in custom com at level 0).
@@ -199,25 +250,35 @@ Notation "'while' b 'do' body 'end'" :=
          (While b body)
             (in custom com at level 89, b at level 99, body at level 99) : com_scope.
 Notation "'go_to' x" := (Go_To x) (in custom com at level 89, x at level 99) : com_scope.
-Notation "'sym' n" := (Symbolic n) (in custom com at level 89, n at level 99) : com_scope.
 Reserved Notation
          "st '=[' c ']=>' st'"
          (at level 40, c custom com at level 99,
           st constr, st' constr at next level).
-Definition empty_st := (_ !-> (IntLit 0)).
+
+Definition A: string := "A".
+Definition sA: SymbolicExp := Symbol A.
+Definition B: string := "B".
+Definition sB: SymbolicExp := Symbol B.
+Definition C: string := "C".
+Definition sC: SymbolicExp := Symbol C.
+Definition X: string := "X".
+Definition Y: string := "Y".
+Definition Z: string := "Z".
+
+Definition empty_st := ( A !-> sA; B !-> sB; C !-> sC; _ !-> (Constant 0)).
 
 (* Notation "x '!->' v" := (x !-> v ; empty_st) (at level 100). *)
 Open Scope com_scope. 
 
+Print SymbolicExp.
 (* Inspired by Imp's aeval. *)
-Fixpoint inteval (s : state) (ie : IntExp) : IntExp :=
+Fixpoint makeSymbolic (s : state) (ie : IntExp) : SymbolicExp :=
   match ie with
-  | IntLit n => IntLit n
-  | <{n1 + n2}> =>  <{(inteval s n1) + (inteval s n2)}>
-  | <{n1 - n2}> => <{(inteval s n1) - (inteval s n2)}>
-  | <{n1 * n2}> =>  <{(inteval s n1) * (inteval s n2)}>
+  | IntLit n => Constant n
+  | <{n1 + n2}> =>  SymAdd (makeSymbolic s n1) (makeSymbolic s n2)
+  | <{n1 - n2}> => SymSub (makeSymbolic s n1) (makeSymbolic s n2)
+  | <{n1 * n2}> =>  SymMult (makeSymbolic s n1) (makeSymbolic s n2)
   | IntId n => s n
-  | Symbolic n => Symbolic n
   end.
 
 (** The following relates our representation of a program, individual nodes and full execution trees.
@@ -242,13 +303,13 @@ Fixpoint inteval (s : state) (ie : IntExp) : IntExp :=
     condition is true and one for if it is false.
 *)
 Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
-  | E_Assign : forall prog node x ie1 ie2 st n pc tree',
+  | E_Assign : forall prog node x ie se st n pc tree',
     extractState node = st ->
     extractIndex node = n ->
     extractPathcond node = pc ->
-    (findStatement prog n) = <{x := ie1}> ->
-    inteval st ie1 = ie2 ->
-    node_eval prog (Node (x !-> ie2 ; st) pc (n+1)) tree' ->
+    (findStatement prog n) = <{x := ie}> ->
+    (makeSymbolic st ie) = se ->
+    node_eval prog (Node (x !-> se ; st) pc (n+1)) tree' ->
     node_eval prog node (Tr node [tree'])
   | E_If : forall prog node be then_body else_body st n pc tree1' tree2',
     extractState node = st ->
@@ -280,43 +341,52 @@ Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
     (findStatement prog n) = Finish ->
     node_eval prog node (Tr node []).
 
-(* TODO : Add tree evaluation relation *)
+Inductive tree_eval : ExecutionTree -> list ExecutionTree -> Prop :=
+  | E_empty: tree_eval empty []
+  | E_Tr: forall (tree: ExecutionTree) children root,
+    tree_eval (Tr root children) children.
 
 (** See figure 1 of King paper. This is the sum procedure. Question -- do we want a return statement?*)
-Definition A: string := "A".
-Definition B: string := "B".
-Definition C: string := "C".
-Definition X: string := "X".
-Definition Y: string := "Y".
-Definition Z: string := "Z".
 
-Definition A_plus_B: string := "A + B".
-Definition B_plus_C: string := "B + C".
-Definition X_plus_Y: string := "X + Y - B".
-Definition prog_1 := [<{X := sym A_plus_B}>; 
-                      <{Y := sym B_plus_C}>; 
-                      <{Z := sym X_plus_Y}>;
+Definition prog_1 := [<{X := A + B}>; 
+                      <{Y := B + C}>; 
+                      <{Z := X + Y - B}>;
                       Finish].
-
-Check Coq.Init.Nat.one.
 
 Example prog_1_eval :
   node_eval prog_1 (Node empty_st none 0)
     (Tr (Node empty_st none 0) [(
-      Tr (Node (X !-> Symbolic "A + B" ; empty_st) none 1) [(
-        Tr (Node (Y !-> Symbolic "B + C" ; X !-> Symbolic "A + B" ; empty_st) none 2) [(
-          Tr (Node (Z !-> Symbolic "X + Y - B" ; Y !-> Symbolic "B + C" ;
-                    X !-> Symbolic "A + B" ; empty_st) none 3) nil
+      Tr (Node (X !-> <{sA s+ sB}> ; empty_st) none 1) [(
+        Tr (Node (Y !-> <{sB s+ sC}> ; X !-> <{sA s+ sB}> ; empty_st) none 2) [(
+          Tr (Node (Z !-> <{(sA s+ sB) s+ (sB s+ sC) s- sB}> ; Y !-> <{sB s+ sC}> ;
+                    X !-> <{sA s+ sB}> ; empty_st) none 3) nil
     )])])]).
 Proof.
-  apply E_Assign with (x := X) (ie1 := Symbolic "A + B") (ie2 := Symbolic "A + B")
+  apply E_Assign with (x := X) (ie := <{A + B}>) (se := <{A s+ B}>)
                       (st := empty_st) (n := O) (pc := none); try reflexivity.
-  - try simpl. apply E_Assign with (x := Y) (ie1 := Symbolic "B + C") (ie2 := Symbolic "B + C")
-                      (st := X !-> Symbolic "A + B"; empty_st) (n := S O) (pc := none); try reflexivity.
-    * try simpl. apply E_Assign with (x := Z) (ie1 := Symbolic "X + Y - B") (ie2 := Symbolic "X + Y - B")
-                      (st := Y !-> Symbolic "B + C"; X !-> Symbolic "A + B"; empty_st) (n := S (S O)) (pc := none); try reflexivity.
-      --  try simpl. apply E_Finish with (st := Z !-> Symbolic "X + Y - B"; Y !-> Symbolic "B + C"; X !-> Symbolic "A + B"; empty_st) (n := S (S(S O))) (pc := none); try reflexivity.
-Qed. 
+  apply E_Assign with (x := Y) (ie := <{B + C}>) (se := <{B s+ C}>)
+                      (st := X !-> <{ A s+ B }>; empty_st) (n := S O) (pc := none); try reflexivity.
+  apply E_Assign with (x := Z ) (ie := <{X + Y - B}>) (se := <{(sA s+ sB) s+ (sB s+ sC) s- sB}>)
+                      (st := Y !-> <{sB s+ sC}> ; X !-> <{sA s+ sB}> ; empty_st) (n := S (S O)) (pc := none); try reflexivity.
+  apply E_Finish with (st := Z !-> <{(sA s+ sB) s+ (sB s+ sC) s- sB}> ; Y !-> <{sB s+ sC}> ;
+                    X !-> <{sA s+ sB}> ; empty_st) (n := S (S (S O))) (pc := none); try reflexivity.
+Qed.
+
+(* hypothesis: prog , node, tree in node_eval relation...; 
+  for all of those things & more, if extract pc from node == pc and this pc is from a node in this relation*)
+
+  
+Definition tree_1 :=     (Tr (Node empty_st none 0) [(
+      Tr (Node (X !-> <{sA s+ sB}> ; empty_st) none 1) [(
+        Tr (Node (Y !-> <{sB s+ sC}> ; X !-> <{sA s+ sB}> ; empty_st) none 2) [(
+          Tr (Node (Z !-> <{(sA s+ sB) s+ (sB s+ sC) s- sB}> ; Y !-> <{sB s+ sC}> ;
+                    X !-> <{sA s+ sB}> ; empty_st) none 3) nil
+    )])])]).
+
+Check tree_1.
+
+Definition evaluated :=  hd (tree_eval tree_1).
+Print evaluated.
 
 Definition stmt1 := findStatement prog_1 0.
 Compute stmt1.
