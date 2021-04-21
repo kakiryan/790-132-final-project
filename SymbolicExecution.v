@@ -346,7 +346,7 @@ Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
     extractIndex node = n ->
     extractPathcond node = pc ->
     (findStatement prog n) = <{if be then then_body else else_body end}> ->
-    ~(SAT pc) ->
+    (SAT (Pand (Bnot be) pc)) ->
     node_eval prog (Node st (Pand (Bnot be) pc) (n + (length then_body))) tree ->
     node_eval prog node (Tr node [tree])
   | E_GoTo: forall prog node i st n pc tree',
@@ -370,7 +370,7 @@ Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
     extractIndex node = n ->
     extractPathcond node = pc ->
     (findStatement prog n) = <{while be do body end}> ->
-    ~(SAT pc) ->
+    (SAT (Pand (Bnot be) pc)) ->
     node_eval prog (Node st (Pand (Bnot be) pc) (n + (length body))) tree ->
     node_eval prog node (Tr node [tree])
   | E_Finish: forall prog node st n pc,
@@ -440,6 +440,7 @@ Definition path_1 := [node_1; node_2; node_3].
 
 Theorem prog_1_path_1_prop_1 : forall (n: TreeNode),
 In n path_1 -> SAT (extractPathcond n).
+Proof.
 unfold path_1. simpl. intros. destruct H as [H1 | [H2 | [H3 | H4]]].
   - rewrite <- H1. simpl. unfold SAT. simpl. exists SAT_assign_ex_1. reflexivity.
   - rewrite <- H2. simpl. unfold SAT. simpl. exists SAT_assign_ex_1. reflexivity.
@@ -447,6 +448,40 @@ unfold path_1. simpl. intros. destruct H as [H1 | [H2 | [H3 | H4]]].
   - destruct H4.
 Qed.
 
+Definition not_finish (s: Statement) : bool  :=
+ match s with 
+  | Finish => false  
+  | _ => true
+end.
+
+Axiom superset_SAT : forall (p: Pathcond) (be : BoolExp),
+ SAT (Pand be p) -> SAT p.
+
+Axiom Finish_unSAT : forall (p: Program)(i: nat),
+ (findStatement p i) = Finish ->
+  False.
+
+Theorem property_1 : forall (prog: Program) (node: TreeNode) (tr : ExecutionTree),
+ node_eval prog node tr ->
+ SAT (extractPathcond node).
+Proof. 
+intros. induction H. 
+  (* E_Assign *)
+  - simpl in IHnode_eval. rewrite H1. apply IHnode_eval. 
+  (* E_IFSat *)
+  - simpl in IHnode_eval1. inversion H1. rewrite H1. apply H3. 
+  (* E_IFUnSAT *)
+   - simpl in IHnode_eval. rewrite H1. apply superset_SAT in IHnode_eval. apply IHnode_eval.  
+  (* E_GoTo *)
+  - simpl in IHnode_eval. rewrite H1. apply IHnode_eval.
+  (* E_WhileSAT *)
+  - simpl in IHnode_eval1. inversion H1. rewrite H1. apply H3. 
+  (* E_WhileUnSAT *)
+  - simpl in IHnode_eval. rewrite H1. apply superset_SAT in IHnode_eval. apply IHnode_eval. 
+  (* E_Finish *)
+   - apply Finish_unSAT in H2. destruct H2. 
+Qed.
+  
 (** Not in paper, but just trying some simple if/else. *)
 Definition prog_2 := [<{X := 2}>; 
                       <{if X >= 0
