@@ -39,20 +39,19 @@ Inductive SymbolicExp : Type :=
 Inductive BoolExp : Type :=
   | BTrue
   | BFalse
-  | Band (b1 : BoolExp) (b2 : BoolExp)
-  | Bor (b1 : BoolExp) (b2 : BoolExp)
   | Bnot (b : BoolExp)
-  | Bge0 (n : IntExp).
+  | Bge0 (n : SymbolicExp).
 
 (* We represent a program state as a map of integer expressions and symbolic values. *)
 Definition state := total_map SymbolicExp.
+Definition concrete_state := total_map Z.
 
 (* A path condition is built up of a series of boolean expressions. *)
 Inductive Pathcond : Type :=
 | none
 | Pand (be : BoolExp) (p : Pathcond).
 
-Fixpoint substitute (se: SymbolicExp) (mappings: total_map Z): Z  :=
+Fixpoint substitute (se: SymbolicExp) (mappings: concrete_state): Z  :=
   match se with
   | Symbol s => mappings s
   | SymAdd s1 s2 => (substitute s1 mappings) + (substitute s2 mappings)
@@ -61,7 +60,7 @@ Fixpoint substitute (se: SymbolicExp) (mappings: total_map Z): Z  :=
   | Constant n => n
   end.
 
-Fixpoint inteval (ie: IntExp) (s: state) (mappings: total_map Z) : Z :=
+Fixpoint inteval (ie: IntExp) (s: state) (mappings:  concrete_state) : Z :=
   match ie with 
   | IntLit n => n
   | IntAdd n1 n2 => (inteval n1 s mappings) + (inteval n2 s mappings)
@@ -70,25 +69,58 @@ Fixpoint inteval (ie: IntExp) (s: state) (mappings: total_map Z) : Z :=
   | IntId x => substitute (s x) mappings
 end.
 
-Fixpoint beval (b : bexp) : bool :=
+Fixpoint beval (b : BoolExp) (mappings: concrete_state) : bool :=
   match b with
-  | BTrue       => true
-  | BFalse      => false
-  | BEq a1 a2   => (aeval a1) =? (aeval a2)
-  | BLe a1 a2   => (aeval a1) <=? (aeval a2)
-  | BNot b1     => negb (beval b1)
-  | BAnd b1 b2  => andb (beval b1) (beval b2)
+  | BTrue   => true
+  | BFalse => false
+  | Bnot b => match b with
+              | BTrue => false
+              | BFalse => true
+              | Bge0 n => substitute n mappings <=? 0
+              | Bnot b => beval b mappings
+              end
+  | Bge0 n => 0 <=? substitute n mappings
   end.
 
-Fixpoint eval_pc (pc: Pathcond) (a b c d e: Z)  : bool :=
+Definition eval_pc (pc: Pathcond) (mappings: concrete_state ) : bool :=
   match pc with 
   | none => true
   | Pand be p => match be with
                 | BTrue => true
                 | BFalse => false
-                | Band b1 b2 => 
+                | Bge0 n => 0 <=? substitute n mappings
+                | Bnot b => beval b mappings
+                end
+  end.
 
-Definition SAT pc := exists sA, sB, sC, sD, sE : SymbolicExp, x = double n.
+Definition A: string := "A".
+Definition sA: SymbolicExp := Symbol A.
+Definition B: string := "B".
+Definition sB: SymbolicExp := Symbol B.
+Definition C: string := "C".
+Definition sC: SymbolicExp := Symbol C.
+Definition X: string := "X".
+Definition Y: string := "Y".
+Definition Z: string := "Z".
+
+Definition empty_st := ( A !-> sA; B !-> sB; C !-> sC; _ !-> (Constant 0)).
+Definition SAT_assign: concrete_state := ( A !-> 0; B !-> 0; C !-> 0; _ !-> ( 0)).
+
+Definition SAT (pc: Pathcond) := exists (cs: concrete_state), eval_pc pc cs = true.
+
+Definition ex_pc := Pand BTrue none.
+Definition SAT_assign_ex_1: concrete_state := ( _ !-> ( 0)).
+Compute eval_pc ex_pc SAT_assign_ex_1.
+Theorem ex_pc_sat : SAT ex_pc.
+Proof.
+unfold SAT. exists (( _ !-> ( 0))). simpl. reflexivity. Qed.
+
+Definition ex_pc_2 := Pand BTrue (Pand (Bge0 sA) none).
+Definition SAT_assign_ex_2: concrete_state := ( A !-> 1; _ !-> ( 0)).
+Compute eval_pc ex_pc SAT_assign_ex_2.
+Theorem ex_pc_sat_2 : SAT ex_pc_2.
+Proof.
+unfold SAT. exists (A !-> 1; ( _ !-> ( 0))). simpl. reflexivity. Qed.
 
 
 (** A TreeNode represents one node of our symbolic execution tree.
@@ -206,7 +238,7 @@ end.
 
 (* The following notation is inspired by Imp with some minor modifications.*)
 Coercion IntId : string >-> IntExp.
-Coercion IntLit : Z >-> IntExp.
+(*Coercion IntLit : Z >-> IntExp.*)
 Coercion Symbol : string >-> SymbolicExp.
 Notation "<{ e }>" := e (at level 0, e custom com at level 99) : com_scope.
 Notation "( x )" := x (in custom com, x at level 99) : com_scope.
@@ -232,10 +264,10 @@ Notation "'true'"  := BTrue (in custom com at level 0).
 Notation "'false'"  := false (at level 1).
 Notation "'false'"  := BFalse (in custom com at level 0).
 Notation "x >= 0" := (Bge0 x) (in custom com at level 70, no associativity).
-Notation "x && y" := (Band x y)
+(*Notation "x && y" := (Band x y)
   (in custom com at level 80, left associativity).
 Notation "x || y" := (Bor x y)
-  (in custom com at level 80, left associativity).
+  (in custom com at level 80, left associativity). *)
 Notation "'~' b"  := (Bnot b)
   (in custom com at level 75, right associativity).
 Notation "x := y" :=
@@ -254,18 +286,6 @@ Reserved Notation
          "st '=[' c ']=>' st'"
          (at level 40, c custom com at level 99,
           st constr, st' constr at next level).
-
-Definition A: string := "A".
-Definition sA: SymbolicExp := Symbol A.
-Definition B: string := "B".
-Definition sB: SymbolicExp := Symbol B.
-Definition C: string := "C".
-Definition sC: SymbolicExp := Symbol C.
-Definition X: string := "X".
-Definition Y: string := "Y".
-Definition Z: string := "Z".
-
-Definition empty_st := ( A !-> sA; B !-> sB; C !-> sC; _ !-> (Constant 0)).
 
 (* Notation "x '!->' v" := (x !-> v ; empty_st) (at level 100). *)
 Open Scope com_scope. 
@@ -383,18 +403,32 @@ Definition tree_1 :=     (Tr (Node empty_st none 0) [(
                     X !-> <{sA s+ sB}> ; empty_st) none 3) nil
     )])])]).
 
-Check tree_1.
+(* Need to show that for all nodes in the tree, the pc is SAT. Right now I just do it 
+for the root. but we need to be able to automatically do it for all paths through the tree.*)
+Definition extractNode (tr : ExecutionTree) : TreeNode :=
+  match tr with 
+  | empty => (Node empty_st none 0)
+  | Tr n _  => n
+  end.
 
-Definition evaluated :=  hd (tree_eval tree_1).
-Print evaluated.
+(* probs Dont want to do this manually*)
+Definition node_1 := extractNode tree_1.
+Definition node_2 := (Node (Y !-> <{sB s+ sC}> ; X !-> <{sA s+ sB}> ; empty_st) none 2).
+Definition node_3 := (Node (Z !-> <{(sA s+ sB) s+ (sB s+ sC) s- sB}> ; Y !-> <{sB s+ sC}> ;
+                    X !-> <{sA s+ sB}> ; empty_st) none 3).
 
-Definition stmt1 := findStatement prog_1 0.
-Compute stmt1.
-Definition stmt2 := findStatement prog_1 1.
-Compute stmt2.
+Definition Path := list TreeNode.
 
-Definition starting_node := Node empty_st none 1. 
-Check node_eval prog_1 starting_node.
+Definition path_1 := [node_1; node_2; node_3].
+
+Theorem prog_1_path_1_prop_1 : forall (n: TreeNode),
+In n path_1 -> SAT (extractPathcond n).
+unfold path_1. simpl. intros. destruct H as [H1 | [H2 | [H3 | H4]]].
+  - rewrite <- H1. simpl. unfold SAT. simpl. exists SAT_assign_ex_1. reflexivity.
+  - rewrite <- H2. simpl. unfold SAT. simpl. exists SAT_assign_ex_1. reflexivity.
+  - rewrite <- H3. simpl. unfold SAT. simpl. exists SAT_assign_ex_1. reflexivity.
+  - destruct H4.
+Qed.
 
 (** Not in paper, but just trying some simple if/else. *)
 Definition prog_2 := [<{X := 2}>; 
