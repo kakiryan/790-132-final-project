@@ -7,10 +7,16 @@ From Coq Require Import Lists.List.
 Import ListNotations.
 
 (** TODO: 
-    - Finish a program eval function 
     - comments
     - add some examples (perhaps from paper)
-    - proofs!!!!!!!
+    - clean up/standardize notation
+    - flesh out if example/update
+    - simple while example
+    - property 1
+      * general proof -- induction on eval fn
+      * or show for every path for every example
+    - property 2
+    - try commutativity    
 *)
 
 
@@ -50,7 +56,7 @@ Definition concrete_state := total_map Z.
 Inductive Pathcond : Type :=
 | none
 | Pand (be : BoolExp) (p : Pathcond).
-
+            
 Fixpoint substitute (se: SymbolicExp) (mappings: concrete_state): Z  :=
   match se with
   | Symbol s => mappings s
@@ -73,12 +79,7 @@ Fixpoint beval (b : BoolExp) (mappings: concrete_state) : bool :=
   match b with
   | BTrue   => true
   | BFalse => false
-  | Bnot b => match b with
-              | BTrue => false
-              | BFalse => true
-              | Bge0 n => substitute n mappings <=? 0
-              | Bnot b => beval b mappings
-              end
+  | Bnot b => negb (beval b mappings)
   | Bge0 n => 0 <=? substitute n mappings
   end.
 
@@ -89,7 +90,7 @@ Definition eval_pc (pc: Pathcond) (mappings: concrete_state ) : bool :=
                 | BTrue => true
                 | BFalse => false
                 | Bge0 n => 0 <=? substitute n mappings
-                | Bnot b => beval b mappings
+                | Bnot b => negb (beval b mappings)
                 end
   end.
 
@@ -331,14 +332,23 @@ Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
     (makeSymbolic st ie) = se ->
     node_eval prog (Node (x !-> se ; st) pc (n+1)) tree' ->
     node_eval prog node (Tr node [tree'])
-  | E_If : forall prog node be then_body else_body st n pc tree1' tree2',
+  | E_IfSAT : forall prog node be then_body else_body st n pc tree1' tree2',
     extractState node = st ->
     extractIndex node = n ->
     extractPathcond node = pc ->
     (findStatement prog n) = <{if be then then_body else else_body end}> ->
+    (SAT pc) -> 
     node_eval prog (Node st (Pand be pc) (n+1)) tree1' ->
     node_eval prog (Node st (Pand (Bnot be) pc) (n + (length then_body))) tree2' ->
     node_eval prog node (Tr node [tree1' ; tree2'])
+  | E_IfUnSAT : forall prog node be then_body else_body st n pc tree,
+    extractState node = st ->
+    extractIndex node = n ->
+    extractPathcond node = pc ->
+    (findStatement prog n) = <{if be then then_body else else_body end}> ->
+    ~(SAT pc) ->
+    node_eval prog (Node st (Pand (Bnot be) pc) (n + (length then_body))) tree ->
+    node_eval prog node (Tr node [tree])
   | E_GoTo: forall prog node i st n pc tree',
     extractState node = st ->
     extractIndex node = n ->
@@ -346,14 +356,23 @@ Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
     (findStatement prog n) = <{go_to i}> ->
     node_eval prog (Node st pc i) tree' ->
     node_eval prog node (Tr node [tree'])
-  | E_While: forall prog node be body st n pc tree1' tree2',
+  | E_WhileSAT: forall prog node be body st n pc tree1' tree2',
     extractState node = st ->
     extractIndex node = n ->
     extractPathcond node = pc ->
     (findStatement prog n) = <{while be do body end}> ->
+    (SAT pc) ->
     node_eval prog (Node st (Pand be pc) (n + 1)) tree1' ->
     node_eval prog (Node st (Pand (Bnot be) pc) (n + (length body))) tree1' ->
     node_eval prog node (Tr node [tree1' ; tree2'])
+  | E_WhileUnSAT: forall prog node be body st n pc tree,
+    extractState node = st ->
+    extractIndex node = n ->
+    extractPathcond node = pc ->
+    (findStatement prog n) = <{while be do body end}> ->
+    ~(SAT pc) ->
+    node_eval prog (Node st (Pand (Bnot be) pc) (n + (length body))) tree ->
+    node_eval prog node (Tr node [tree])
   | E_Finish: forall prog node st n pc,
     extractState node = st ->
     extractIndex node = n ->
@@ -403,8 +422,6 @@ Definition tree_1 :=     (Tr (Node empty_st none 0) [(
                     X !-> <{sA s+ sB}> ; empty_st) none 3) nil
     )])])]).
 
-(* Need to show that for all nodes in the tree, the pc is SAT. Right now I just do it 
-for the root. but we need to be able to automatically do it for all paths through the tree.*)
 Definition extractNode (tr : ExecutionTree) : TreeNode :=
   match tr with 
   | empty => (Node empty_st none 0)
