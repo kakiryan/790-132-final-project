@@ -50,14 +50,14 @@ Inductive BoolExp : Type :=
 
 (* We represent a program state as a map of integer expressions and symbolic values. *)
 Definition state := total_map SymbolicExp.
-Definition concrete_state := total_map Z.
+Definition concreteState := total_map Z.
 
 (* A path condition is built up of a series of boolean expressions. *)
-Inductive Pathcond : Type :=
+Inductive PathCond : Type :=
 | none
-| Pand (be : BoolExp) (p : Pathcond).
+| Pand (be : BoolExp) (p : PathCond).
             
-Fixpoint substitute (se: SymbolicExp) (mappings: concrete_state): Z  :=
+Fixpoint substitute (se: SymbolicExp) (mappings: concreteState): Z  :=
   match se with
   | Symbol s => mappings s
   | SymAdd s1 s2 => (substitute s1 mappings) + (substitute s2 mappings)
@@ -66,7 +66,7 @@ Fixpoint substitute (se: SymbolicExp) (mappings: concrete_state): Z  :=
   | Constant n => n
   end.
 
-Fixpoint inteval (ie: IntExp) (s: state) (mappings:  concrete_state) : Z :=
+Fixpoint inteval (ie: IntExp) (s: state) (mappings:  concreteState) : Z :=
   match ie with 
   | IntLit n => n
   | IntAdd n1 n2 => (inteval n1 s mappings) + (inteval n2 s mappings)
@@ -75,7 +75,7 @@ Fixpoint inteval (ie: IntExp) (s: state) (mappings:  concrete_state) : Z :=
   | IntId x => substitute (s x) mappings
 end.
 
-Fixpoint beval (b : BoolExp) (mappings: concrete_state) : bool :=
+Fixpoint beval (b : BoolExp) (mappings: concreteState) : bool :=
   match b with
   | BTrue   => true
   | BFalse => false
@@ -83,17 +83,22 @@ Fixpoint beval (b : BoolExp) (mappings: concrete_state) : bool :=
   | Bge0 n => 0 <=? substitute n mappings
   end.
 
-Definition eval_pc (pc: Pathcond) (mappings: concrete_state ) : bool :=
+Fixpoint eval_pc (pc: PathCond) (mappings: concreteState ) : bool :=
   match pc with 
   | none => true
   | Pand be p => match be with
-                | BTrue => true
+                | BTrue => eval_pc p mappings
                 | BFalse => false
-                | Bge0 n => 0 <=? substitute n mappings
-                | Bnot b => negb (beval b mappings)
+                | Bge0 n => (0 <=? substitute n mappings) && eval_pc p mappings
+                | Bnot b => (negb (beval b mappings)) && eval_pc p mappings
                 end
   end.
 
+
+(** For simplicity, any program we work with will have up to three parameters
+    and three local variables, called A, B, C and X, Y, Z, respectively.
+    The values sA, sB, and sC are the symbolic variables which replace
+    A, B, and C when creating the symbolic expressions. *)
 Definition A: string := "A".
 Definition sA: SymbolicExp := Symbol A.
 Definition B: string := "B".
@@ -104,32 +109,46 @@ Definition X: string := "X".
 Definition Y: string := "Y".
 Definition Z: string := "Z".
 
+(** The empty state will map each parameter to its symbolic variable, and
+    each local variable to the default value of 0. *)
 Definition empty_st := ( A !-> sA; B !-> sB; C !-> sC; _ !-> (Constant 0)).
-Definition SAT_assign: concrete_state := ( A !-> 0; B !-> 0; C !-> 0; _ !-> ( 0)).
+Definition SAT_assign: concreteState := ( A !-> 0; B !-> 0; C !-> 0; _ !-> ( 0)).
 
-Definition SAT (pc: Pathcond) := exists (cs: concrete_state), eval_pc pc cs = true.
+(** SAT is a property of any given pc, saying that there exist concrete values
+    which make it satisfiable. *)
+Definition SAT (pc: PathCond) := exists (cs: concreteState), eval_pc pc cs = true.
 
+(** For example, The trivial path condition 'true' is satisfiable by the
+    map that takes each symbolic variable to 0. *)
 Definition ex_pc := Pand BTrue none.
-Definition SAT_assign_ex_1: concrete_state := ( _ !-> ( 0)).
-Compute eval_pc ex_pc SAT_assign_ex_1.
-Theorem ex_pc_sat : SAT ex_pc.
-Proof.
-unfold SAT. exists (( _ !-> ( 0))). simpl. reflexivity. Qed.
+Definition SAT_assign_ex_1: concreteState := ( _ !-> 0).
 
-Definition ex_pc_2 := Pand BTrue (Pand (Bge0 sA) none).
-Definition SAT_assign_ex_2: concrete_state := ( A !-> 1; _ !-> ( 0)).
-Compute eval_pc ex_pc SAT_assign_ex_2.
-Theorem ex_pc_sat_2 : SAT ex_pc_2.
+(** When we evaluate ex_pc with this map, we get the boolean true. *)
+Compute eval_pc ex_pc SAT_assign_ex_1.
+Example ex_pc_sat : SAT ex_pc.
 Proof.
-unfold SAT. exists (A !-> 1; ( _ !-> ( 0))). simpl. reflexivity. Qed.
+  unfold SAT. exists (( _ !-> ( 0))). simpl. reflexivity.
+Qed.
+
+(** For another example, we prove that the path condition
+    sA >= 0
+    is satisfiable by the map that takes sA to 1 and all other symbolic
+    variables to 0. *)
+Definition ex_pc_2 := Pand BTrue (Pand (Bge0 sA) none).
+Definition SAT_assign_ex_2: concreteState := ( A !-> 1; _ !-> ( 0)).
+Compute eval_pc ex_pc SAT_assign_ex_2.
+Example ex_pc_sat_2 : SAT ex_pc_2.
+Proof.
+  unfold SAT. exists (A !-> 1; ( _ !-> ( 0))). simpl. reflexivity.
+Qed.
 
 
 (** A TreeNode represents one node of our symbolic execution tree.
     It contains a program state, path condition, and an index
-    into the program. The index points to a particular statement.
+    into the program. The index points to a particular statement in the program.
 *)
 Inductive TreeNode : Type :=
-  | Node (s : state) (pc : Pathcond) (index : nat).
+  | Node (s : state) (pc : PathCond) (index : nat).
 
 (** Getters to extract information from the TreeNode object. *)
 
@@ -143,37 +162,40 @@ Definition extractIndex (n : TreeNode) : nat :=
   | Node _ _ i => i
   end.
 
-Definition extractPathcond (n : TreeNode) : Pathcond :=
+Definition extractPathCond (n : TreeNode) : PathCond :=
   match n with 
   | Node _ pc _ => pc
   end.
 
-(** An ExecutionTree is either empty or a recursive structure
-  of nodes.
-  TODO: I don't think this definition is actually correct, because
-  it'll only go one level deep. *)
+(** An ExecutionTree is either empty or a root node with a list of
+    child trees. *)
 Inductive ExecutionTree : Type :=
   | empty
   | Tr (n : TreeNode) (children : list ExecutionTree).
 
-(** One basic instruction in the Integer language. This differs from
+(** Now we define a basic instruction in the Integer language. This differs from
     the Imp implementation in Imp.v, because we don't have a
     statement of the form [stmt1 ; stmt2]. Instead, we maintain
     an ordering of statements in a list, called a Program. 
 
     In addition to basic assignment, we provide support for the same control 
-    flow structures as in the original paper -- if/else, while loops, and function calls modeled by
-    go_tos.
+    flow structures as in the original paper -- if/else, while loops,
+    and function calls modeled by go_tos.
 
-    -`Assignment` statements require a variable name (string) and an integer expression.
+    - Assignment statements require a variable name (string) and an integer expression.
     The value of this variable is updated in the program state.
 
-    -`If` statements are presented by a boolean expression for the condition
-    and a then_block and an else_block. Both of these blocks are represented as lists of statements.
+    - If statements are represented by a boolean expression for the condition,
+    a then_block and an else_block. Both of these blocks contain a list of
+    statements.
 
-    -`While` loops are similarlly reprsented by a boolean expression and a list of body statements.
+    - While loops are similarlly reprsented by a boolean expression and a
+    list of body statements.
 
-    -`Go_To` statements contain the index of the statement we would like to jump to.
+    - Go_To statements contain the index of the statement we would like to jump to.
+
+    - Finish statements indicate the end of a program. These aren't in the origininal
+    paper, but make some of our computations easier.
 *)
 Inductive Statement := 
   | Assignment (x: string) (a: IntExp) 
@@ -182,28 +204,29 @@ Inductive Statement :=
   | Go_To (idx: nat)
   | Finish.
 
-
-(** As mentioned above, each program is represented as a list of statements. **)
+(** As mentioned above, each program is represented as a list of statements. *)
 Definition Program := list Statement.
 
-(** From any point in our program, we need to know where to go next, or what 
-    statement is the next to be executed. This is useful in the node_eval relation 
-    below. 
+(** Since our Node data structure and the Go_To statement constructor reference an
+    instruction by its index, we need a way to assign a unique index number to each
+    statement in a program.
     
-    This function takes in a program, or list of statements, and an index. This index
+    The findStatement function takes in a program and an index. This index
     is the location of the statement in our program that we would like to execute next.
     
-    If the index parameter is 0, we can just return what is at the head of our list. We 
-    just want to execute the current statement. If the index is not 0, we must recursively
-    traverse our program until we arrive at the desired location, and return that statement.
+    If the index parameter is 0, we can just return what is at the head of our list.
+    If the index is not 0, we must recursively traverse our program until we arrive
+    at the desired location, and return that statement.
 
-    For Assignment statements and Go_Tos, this is straightforward.
+    The Assignment and Go_To statements have no nested structure, so this is
+    straightforward.
 
     For conditonal statements, If and While, the calculation is a bit more involved. 
-    The key to being able to make this work for a hierarchical program of nested lists of statements
-    is traversing the program as if the lists were flattened. 
-    So for example, if our program has an If statement at index 2 with two statements in the then block 
-    and two in the else block, the indices of the then block would be 3, 4 and the else block would be 5, 6.
+    The key to being able to make this work for a hierarchical program of nested
+    lists of statements is traversing the program as if the lists were flattened. 
+    So for example, if our program has an If statement at index 2 with two
+    statements in the then block and two in the else block, the indices of the
+    then block would be 3, 4 and the else block would be 5, 6.
 
     Under this model, we can calculate the offsets into our `then` (th) and `else` (e) lists by simple operations
     over the lengths of the lists. For example, if the desired index is greater than the length of the then block,
@@ -219,6 +242,8 @@ Fixpoint findStatement (prog : Program) (i : nat) : Statement :=
     | nil => Go_To 0
     | h :: t => match h with
       | Assignment x a => findStatement t i'
+      (* For If statements, we need to recursively flatten the structure
+      within the 'then' and 'else' blocks. *)
       | If b th e => match leb (length th) i' with
          | true => match leb ((length th) + (length e)) i' with
            | true => findStatement t (i' - (length th) - (length e))
@@ -226,18 +251,23 @@ Fixpoint findStatement (prog : Program) (i : nat) : Statement :=
            end 
          | false => findStatement th i'
         end
+      (* Similarly, for While statements, we must recursively flatten the
+      structure within the loop body. *)
       | While b body => match leb (length body) i' with
          | true => findStatement t (i' - (length body))
          | false => findStatement body i'
         end
       | Go_To j => findStatement t i'
-      | Finish => Finish (* bogus *)
+      (* If we reach this constructor, then we're looking for an instructon
+      past the end of the program. This case isn't valid. *)
+      | Finish => Finish
     end
   end
 end.
 
 
-(* The following notation is inspired by Imp with some minor modifications.*)
+(** The following notation is inspired by the Imp chapter,
+    with some minor modifications.*)
 Coercion IntId : string >-> IntExp.
 (*Coercion IntLit : Z >-> IntExp.*)
 Coercion Symbol : string >-> SymbolicExp.
@@ -291,8 +321,7 @@ Reserved Notation
 (* Notation "x '!->' v" := (x !-> v ; empty_st) (at level 100). *)
 Open Scope com_scope. 
 
-Print SymbolicExp.
-(* Inspired by Imp's aeval. *)
+(* Inspired by Imp's aeval. This will convert an IntExp into a SymbolicExp. *)
 Fixpoint makeSymbolic (s : state) (ie : IntExp) : SymbolicExp :=
   match ie with
   | IntLit n => Constant n
@@ -302,81 +331,98 @@ Fixpoint makeSymbolic (s : state) (ie : IntExp) : SymbolicExp :=
   | IntId n => s n
   end.
 
-(** The following relates our representation of a program, individual nodes and full execution trees.
-    We will explain case by case what is happening below:
+(** The following relation is our representation of symbolic execution of a program.
+    It relates a given program, and a node corresponding to a particular statement,
+    to a resultant execution tree. As defined here, the relation will generate 
+    nodes for unsatisfiable path conditions (i.e. false path conditions) but
+    will not progress execution past these nodes. *)
 
-    E_Assign: Given some assignment statement and tree node with some state, pc and index, 
-    The resultant ExecutionTree is a single node with an updated state to reflect the assingment operation.
-    The index is incremented by one since there is no branching happening at this step.
-
-    E_If: Given some if statement and tree node with some state, pc and index, the resultant ExecutionTree is 
-    a made up of two nodes, one for the case the boolean condition is true and the other for false. 
-    In the true case, we add that condition to the path condition and the index increase by one to enter the then block's
-    list of statements. 
-    In the false case, we add the negation of the boolean condition and the index is the current index + the length of
-    the then block's list of statements. We are able to compute the indices this way because of how we have implemented
-    findStatment above.
-
-    E_GoTo: Given some index, the resultant tree is a single node whose index is specified by the argument given to the 
-    Go_To constructor.
-
-    E_While: Similar to the If statement, the resultant ExecutionTree has two nodes. One for the case that the boolean
-    condition is true and one for if it is false.
-*)
 Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
+(** Given some node pointing to an assignment statement, with a given state and
+    path condition, the resultant ExecutionTree is a single node with an updated
+    state to reflect the assingment operation. The index is incremented by one in
+    the child node, since there is no branching happening at this step. *)
   | E_Assign : forall prog node x ie se st n pc tree',
     extractState node = st ->
     extractIndex node = n ->
-    extractPathcond node = pc ->
+    extractPathCond node = pc ->
     (findStatement prog n) = <{x := ie}> ->
     (makeSymbolic st ie) = se ->
     node_eval prog (Node (x !-> se ; st) pc (n+1)) tree' ->
     node_eval prog node (Tr node [tree'])
+
+(** Given some node pointing to an if statement, with a given state and path
+    condition, the resultant ExecutionTree depends on whether the boolean check is
+    satisfiable or not.
+
+    If so, it branches into two nodes: one where the condition is true and one where
+    the condition is false. In these cases, we respectively add the condition and its
+    negation to the path condition in the child nodes, and then update the index to
+    point to the next executable instruction. *)
   | E_IfSAT : forall prog node be then_body else_body st n pc tree1' tree2',
     extractState node = st ->
     extractIndex node = n ->
-    extractPathcond node = pc ->
+    extractPathCond node = pc ->
     (findStatement prog n) = <{if be then then_body else else_body end}> ->
     (SAT pc) -> 
     node_eval prog (Node st (Pand be pc) (n+1)) tree1' ->
     node_eval prog (Node st (Pand (Bnot be) pc) (n + (length then_body))) tree2' ->
     node_eval prog node (Tr node [tree1' ; tree2'])
+
+(** If the boolean in the path condition is unsatisfiable, then we will only
+    extend the execution tree along the 'else' branch. *)
   | E_IfUnSAT : forall prog node be then_body else_body st n pc tree,
     extractState node = st ->
     extractIndex node = n ->
-    extractPathcond node = pc ->
+    extractPathCond node = pc ->
     (findStatement prog n) = <{if be then then_body else else_body end}> ->
     (SAT (Pand (Bnot be) pc)) ->
     node_eval prog (Node st (Pand (Bnot be) pc) (n + (length then_body))) tree ->
     node_eval prog node (Tr node [tree])
+
+(** Go_To statements have no branching structure involved. There is just one child
+    node, which has an index pointing to the statement specified by the Go_To. *)
   | E_GoTo: forall prog node i st n pc tree',
     extractState node = st ->
     extractIndex node = n ->
-    extractPathcond node = pc ->
+    extractPathCond node = pc ->
     (findStatement prog n) = <{go_to i}> ->
     node_eval prog (Node st pc i) tree' ->
     node_eval prog node (Tr node [tree'])
+
+(** While statements are similar to If statements, in that we have to consider
+    whether the boolean expression is satisfiable or not. If so, we make two
+    branches: one going into the loop body, and another skipping the loop. The
+    next executable instruction is pointed to by separate indices in each case. We
+    add the boolean condition to the branch that executes the loop body, and its
+    negation to the branch that skips the loop. *)
   | E_WhileSAT: forall prog node be body st n pc tree1' tree2',
     extractState node = st ->
     extractIndex node = n ->
-    extractPathcond node = pc ->
+    extractPathCond node = pc ->
     (findStatement prog n) = <{while be do body end}> ->
     (SAT pc) ->
     node_eval prog (Node st (Pand be pc) (n + 1)) tree1' ->
     node_eval prog (Node st (Pand (Bnot be) pc) (n + (length body))) tree1' ->
     node_eval prog node (Tr node [tree1' ; tree2'])
+
+(** If the path condition is unsatisfiable, we unconditionally skip the loop body,
+    and just have one child node representing this case. This child node has an
+    updated index and path condition. *)
   | E_WhileUnSAT: forall prog node be body st n pc tree,
     extractState node = st ->
     extractIndex node = n ->
-    extractPathcond node = pc ->
+    extractPathCond node = pc ->
     (findStatement prog n) = <{while be do body end}> ->
     (SAT (Pand (Bnot be) pc)) ->
     node_eval prog (Node st (Pand (Bnot be) pc) (n + (length body))) tree ->
     node_eval prog node (Tr node [tree])
+
+(** When the Finish statement is evaluated, it generates no child nodes. *)
   | E_Finish: forall prog node st n pc,
     extractState node = st ->
     extractIndex node = n ->
-    extractPathcond node = pc ->
+    extractPathCond node = pc ->
     (findStatement prog n) = Finish ->
     node_eval prog node (Tr node []).
 
@@ -385,7 +431,10 @@ Inductive tree_eval : ExecutionTree -> list ExecutionTree -> Prop :=
   | E_Tr: forall (tree: ExecutionTree) children root,
     tree_eval (Tr root children) children.
 
-(** See figure 1 of King paper. This is the sum procedure. Question -- do we want a return statement?*)
+(** The following is our execution of the program shown in Figure 1 of King's
+    paper. We supply the symbolic execution tree corresponding to this program
+    (which is just a simple list of nodes, with no branching), and prove that
+    this is indeed the correct tree. *)
 
 Definition prog_1 := [<{X := A + B}>; 
                       <{Y := B + C}>; 
@@ -404,23 +453,28 @@ Proof.
   apply E_Assign with (x := X) (ie := <{A + B}>) (se := <{A s+ B}>)
                       (st := empty_st) (n := O) (pc := none); try reflexivity.
   apply E_Assign with (x := Y) (ie := <{B + C}>) (se := <{B s+ C}>)
-                      (st := X !-> <{ A s+ B }>; empty_st) (n := S O) (pc := none); try reflexivity.
-  apply E_Assign with (x := Z ) (ie := <{X + Y - B}>) (se := <{(sA s+ sB) s+ (sB s+ sC) s- sB}>)
-                      (st := Y !-> <{sB s+ sC}> ; X !-> <{sA s+ sB}> ; empty_st) (n := S (S O)) (pc := none); try reflexivity.
-  apply E_Finish with (st := Z !-> <{(sA s+ sB) s+ (sB s+ sC) s- sB}> ; Y !-> <{sB s+ sC}> ;
-                    X !-> <{sA s+ sB}> ; empty_st) (n := S (S (S O))) (pc := none); try reflexivity.
+                      (st := X !-> <{ A s+ B }>; empty_st)
+                      (n := S O) (pc := none); try reflexivity.
+  apply E_Assign with (x := Z ) (ie := <{X + Y - B}>)
+                      (se := <{(sA s+ sB) s+ (sB s+ sC) s- sB}>)
+                      (st := Y !-> <{sB s+ sC}> ; X !-> <{sA s+ sB}> ; empty_st)
+                      (n := S (S O)) (pc := none); try reflexivity.
+  apply E_Finish with (st := Z !-> <{(sA s+ sB) s+ (sB s+ sC) s- sB}> ;
+                             Y !-> <{sB s+ sC}> ; X !-> <{sA s+ sB}> ; empty_st)
+                      (n := S (S (S O))) (pc := none); try reflexivity.
 Qed.
 
 (* hypothesis: prog , node, tree in node_eval relation...; 
   for all of those things & more, if extract pc from node == pc and this pc is from a node in this relation*)
 
   
-Definition tree_1 :=     (Tr (Node empty_st none 0) [(
-      Tr (Node (X !-> <{sA s+ sB}> ; empty_st) none 1) [(
-        Tr (Node (Y !-> <{sB s+ sC}> ; X !-> <{sA s+ sB}> ; empty_st) none 2) [(
-          Tr (Node (Z !-> <{(sA s+ sB) s+ (sB s+ sC) s- sB}> ; Y !-> <{sB s+ sC}> ;
-                    X !-> <{sA s+ sB}> ; empty_st) none 3) nil
-    )])])]).
+Definition tree_1 := 
+  (Tr (Node empty_st none 0) [(
+    Tr (Node (X !-> <{sA s+ sB}> ; empty_st) none 1) [(
+      Tr (Node (Y !-> <{sB s+ sC}> ; X !-> <{sA s+ sB}> ; empty_st) none 2) [(
+        Tr (Node (Z !-> <{(sA s+ sB) s+ (sB s+ sC) s- sB}> ; Y !-> <{sB s+ sC}> ;
+                  X !-> <{sA s+ sB}> ; empty_st) none 3) nil
+  )])])]).
 
 Definition extractNode (tr : ExecutionTree) : TreeNode :=
   match tr with 
@@ -431,15 +485,16 @@ Definition extractNode (tr : ExecutionTree) : TreeNode :=
 (* probs Dont want to do this manually*)
 Definition node_1 := extractNode tree_1.
 Definition node_2 := (Node (Y !-> <{sB s+ sC}> ; X !-> <{sA s+ sB}> ; empty_st) none 2).
-Definition node_3 := (Node (Z !-> <{(sA s+ sB) s+ (sB s+ sC) s- sB}> ; Y !-> <{sB s+ sC}> ;
-                    X !-> <{sA s+ sB}> ; empty_st) none 3).
+Definition node_3 := (Node (Z !-> <{(sA s+ sB) s+ (sB s+ sC) s- sB}> ;
+                            Y !-> <{sB s+ sC}> ;
+                            X !-> <{sA s+ sB}> ; empty_st) none 3).
 
 Definition Path := list TreeNode.
 
 Definition path_1 := [node_1; node_2; node_3].
 
 Theorem prog_1_path_1_prop_1 : forall (n: TreeNode),
-In n path_1 -> SAT (extractPathcond n).
+In n path_1 -> SAT (extractPathCond n).
 Proof.
 unfold path_1. simpl. intros. destruct H as [H1 | [H2 | [H3 | H4]]].
   - rewrite <- H1. simpl. unfold SAT. simpl. exists SAT_assign_ex_1. reflexivity.
@@ -454,7 +509,7 @@ Definition not_finish (s: Statement) : bool  :=
   | _ => true
 end.
 
-Axiom superset_SAT : forall (p: Pathcond) (be : BoolExp),
+Axiom superset_SAT : forall (p: PathCond) (be : BoolExp),
  SAT (Pand be p) -> SAT p.
 
 Axiom Finish_unSAT : forall (p: Program)(i: nat),
@@ -463,7 +518,7 @@ Axiom Finish_unSAT : forall (p: Program)(i: nat),
 
 Theorem property_1 : forall (prog: Program) (node: TreeNode) (tr : ExecutionTree),
  node_eval prog node tr ->
- SAT (extractPathcond node).
+ SAT (extractPathCond node).
 Proof. 
 intros. induction H. 
   (* E_Assign *)
