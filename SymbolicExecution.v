@@ -207,6 +207,23 @@ Inductive Statement :=
 (** As mentioned above, each program is represented as a list of statements. *)
 Definition Program := list Statement.
 
+Fixpoint progLength (prog : Program) (gas : nat) : nat :=
+  match gas with
+  | O => O 
+  | S gas' => match prog with 
+    | nil => O 
+    | h :: t => match h with 
+      | Assignment x a => 1 + (progLength t gas')
+      | If b th el => 
+        1 + (progLength th gas') + (progLength el gas') + (progLength t gas')
+      | While b body => 1 + (progLength body gas') + (progLength t gas')
+      | Go_To idx => 1 + (progLength t gas')
+      (** We will never have Finish inside the middle of a program. *)
+      | Finish => O
+      end
+    end
+  end.
+
 (** Since our Node data structure and the Go_To statement constructor reference an
     instruction by its index, we need a way to assign a unique index number to each
     statement in a program.
@@ -232,6 +249,9 @@ Definition Program := list Statement.
     over the lengths of the lists. For example, if the desired index is greater than the length of the then block,
     we know the desired statement is either in the else block or outside of the if/else statement entirely.
 *)
+
+Definition MAX_PROG_LENGTH := 1000%nat.
+
 Fixpoint findStatement (prog : Program) (i : nat) : Statement :=
   match i with 
   | O => match prog with 
@@ -244,17 +264,19 @@ Fixpoint findStatement (prog : Program) (i : nat) : Statement :=
       | Assignment x a => findStatement t i'
       (* For If statements, we need to recursively flatten the structure
       within the 'then' and 'else' blocks. *)
-      | If b th e => match leb (length th) i' with
-         | true => match leb ((length th) + (length e)) i' with
-           | true => findStatement t (i' - (length th) - (length e))
-           | false => findStatement e (i' - (length th))
+      | If b th e => match leb (progLength th MAX_PROG_LENGTH) i' with
+         | true => match leb ((progLength th MAX_PROG_LENGTH) + 
+                              (progLength e MAX_PROG_LENGTH)) i' with
+           | true => findStatement t (i' - (progLength th MAX_PROG_LENGTH) - 
+                                      (progLength e MAX_PROG_LENGTH))
+           | false => findStatement e (i' - (progLength th MAX_PROG_LENGTH))
            end 
          | false => findStatement th i'
         end
       (* Similarly, for While statements, we must recursively flatten the
       structure within the loop body. *)
-      | While b body => match leb (length body) i' with
-         | true => findStatement t (i' - (length body))
+      | While b body => match leb (progLength body MAX_PROG_LENGTH) i' with
+         | true => findStatement t (i' - (progLength body MAX_PROG_LENGTH))
          | false => findStatement body i'
         end
       | Go_To j => findStatement t i'
@@ -483,45 +505,9 @@ Definition tree_1 :=
                   X !-> <{sA s+ sB}> ; empty_st) none 3) nil
   )])])]).
 
-Definition extractNode (tr : ExecutionTree) : TreeNode :=
-  match tr with 
-  | empty => (Node empty_st none 0)
-  | Tr n _  => n
-  end.
-
-(* probs Dont want to do this manually*)
-Definition node_1 := extractNode tree_1.
-Definition node_2 := (Node (Y !-> <{sB s+ sC}> ; X !-> <{sA s+ sB}> ; empty_st) none 2).
-Definition node_3 := (Node (Z !-> <{(sA s+ sB) s+ (sB s+ sC) s- sB}> ;
-                            Y !-> <{sB s+ sC}> ;
-                            X !-> <{sA s+ sB}> ; empty_st) none 3).
-
-Definition Path := list TreeNode.
-
-Definition path_1 := [node_1; node_2; node_3].
-
-Theorem prog_1_path_1_prop_1 : forall (n: TreeNode),
-In n path_1 -> SAT (extractPathCond n).
-Proof.
-unfold path_1. simpl. intros. destruct H as [H1 | [H2 | [H3 | H4]]].
-  - rewrite <- H1. simpl. unfold SAT. simpl. exists SAT_assign_ex_1. reflexivity.
-  - rewrite <- H2. simpl. unfold SAT. simpl. exists SAT_assign_ex_1. reflexivity.
-  - rewrite <- H3. simpl. unfold SAT. simpl. exists SAT_assign_ex_1. reflexivity.
-  - destruct H4.
-Qed.
-
-Definition not_finish (s: Statement) : bool  :=
- match s with 
-  | Finish => false  
-  | _ => true
-end.
-
+(** This should be provable, but we'll skip it in the interest of time. *)
 Axiom superset_SAT : forall (p: PathCond) (be : BoolExp),
  SAT (Pand be p) -> SAT p.
-
-Axiom Finish_unSAT : forall (p: Program)(i: nat),
- (findStatement p i) = Finish ->
-  False.
 
 Theorem property_1 : forall (prog: Program) (node: TreeNode) (tr : ExecutionTree),
  node_eval prog node tr ->
