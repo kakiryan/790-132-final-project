@@ -346,6 +346,7 @@ Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
     extractState node = st ->
     extractIndex node = n ->
     extractPathCond node = pc ->
+    (SAT pc) ->
     (findStatement prog n) = <{x := ie}> ->
     (makeSymbolic st ie) = se ->
     node_eval prog (Node (x !-> se ; st) pc (n+1)) tree' ->
@@ -386,6 +387,7 @@ Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
     extractState node = st ->
     extractIndex node = n ->
     extractPathCond node = pc ->
+    (SAT pc) ->
     (findStatement prog n) = <{go_to i}> ->
     node_eval prog (Node st pc i) tree' ->
     node_eval prog node (Tr node [tree'])
@@ -423,6 +425,7 @@ Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
     extractState node = st ->
     extractIndex node = n ->
     extractPathCond node = pc ->
+    (SAT pc) ->
     (findStatement prog n) = Finish ->
     node_eval prog node (Tr node []).
 
@@ -452,16 +455,20 @@ Example prog_1_eval :
 Proof.
   apply E_Assign with (x := X) (ie := <{A + B}>) (se := <{A s+ B}>)
                       (st := empty_st) (n := O) (pc := none); try reflexivity.
+    unfold SAT. exists SAT_assign_ex_1. simpl. reflexivity.
   apply E_Assign with (x := Y) (ie := <{B + C}>) (se := <{B s+ C}>)
                       (st := X !-> <{ A s+ B }>; empty_st)
                       (n := S O) (pc := none); try reflexivity.
+    unfold SAT. exists SAT_assign_ex_1. simpl. reflexivity.
   apply E_Assign with (x := Z ) (ie := <{X + Y - B}>)
                       (se := <{(sA s+ sB) s+ (sB s+ sC) s- sB}>)
                       (st := Y !-> <{sB s+ sC}> ; X !-> <{sA s+ sB}> ; empty_st)
                       (n := S (S O)) (pc := none); try reflexivity.
+    unfold SAT. exists SAT_assign_ex_1. simpl. reflexivity.
   apply E_Finish with (st := Z !-> <{(sA s+ sB) s+ (sB s+ sC) s- sB}> ;
                              Y !-> <{sB s+ sC}> ; X !-> <{sA s+ sB}> ; empty_st)
                       (n := S (S (S O))) (pc := none); try reflexivity.
+    unfold SAT. exists SAT_assign_ex_1. simpl. reflexivity.
 Qed.
 
 (* hypothesis: prog , node, tree in node_eval relation...; 
@@ -534,7 +541,7 @@ intros. induction H.
   (* E_WhileUnSAT *)
   - simpl in IHnode_eval. rewrite H1. apply superset_SAT in IHnode_eval. apply IHnode_eval. 
   (* E_Finish *)
-   - apply Finish_unSAT in H2. destruct H2. 
+   - destruct node. simpl. simpl in H1. rewrite H1. apply H2.
 Qed.
   
 (** Not in paper, but just trying some simple if/else. *)
