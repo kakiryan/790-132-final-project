@@ -6,18 +6,19 @@ From LF Require Import Maps.
 From Coq Require Import Lists.List.
 Import ListNotations.
 
-(** TODO: 
-    - comments
-    - add some examples (perhaps from paper)
-    - clean up/standardize notation
-    - flesh out if example/update
-    - simple while example
-    - property 1
-      * general proof -- induction on eval fn
-      * or show for every path for every example
-    - property 2
-    - try commutativity    
-*)
+(* What we have done:
+ - all of minimum goal
+ - standard goal
+    * Property 1: prove generally that PC never identically false
+    * Property 2: proved for example 1 & example 2 in paper
+ - reach goal
+    * Property 3: prove for example 1 
+ - proving the trees for each example are correct 
+
+ Need to do:
+ - More commnts & clean up
+ - Simple loop example. 
+ - Commutativity ex 2*)
 
 
 Declare Custom Entry com.
@@ -606,7 +607,7 @@ Proof.
     (* J := 1 *)
     apply E_Assign with (x := J) (ie := <{IntLit 1}>) (se := <{Constant 1}>)
                       (st := Z !-> (Constant 1) ; empty_st_2) (n := S O) (pc := none); try reflexivity.
-    unfold SAT. exists SAT_assign_prog_2_true_branch. simpl. reflexivity.
+    unfold SAT. exists SAT_assign_prog_2_true_branch. simpl. reflexivity. 
     (* if Y >= 0. This is true for the first iteration. *)
     apply E_IfSAT with (be := Bge0 sY) (then_body := [<{Z := Z * X }>;
                               <{Y := Y - J}>;
@@ -632,7 +633,7 @@ Proof.
                                 <{Y := Y - J}>;
                                   Go_To 2; Finish]) (else_body := [Finish])(st := Y !-> <{sY s- sJ}>; Z !-> <{sZ2 s* sX}>; J !-> (Constant 1); Z !-> (Constant 1) ; empty_st_2) 
     (n := S(S O)) (pc := Pand <{ sY >= 0 }> none); try reflexivity. 
-     unfold SAT. apply cond_after_1_iteration. exists SAT_assign_prog_2_true_branch. simpl. reflexivity.
+     apply cond_after_1_iteration. exists SAT_assign_prog_2_true_branch. simpl. reflexivity.
     (* Finish. This is the end of the road for the original true branch. *)  
     apply E_Finish with (st := Y !-> <{sY s- sJ}>; Z !-> <{sZ2 s* sX}>; J !-> (Constant 1); Z !-> (Constant 1) ; empty_st_2) 
     (n := S(S(S (S(S(S O)))))) (pc := (Pand <{ ~ sY s- sJ >= 0 }> (Pand <{ sY >= 0 }> none))); try reflexivity.
