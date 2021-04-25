@@ -451,10 +451,35 @@ Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
     (findStatement prog n) = Finish ->
     node_eval prog node (Tr node []).
 
-Inductive tree_eval : ExecutionTree -> list ExecutionTree -> Prop :=
-  | E_empty: tree_eval empty []
-  | E_Tr: forall (tree: ExecutionTree) children root,
-    tree_eval (Tr root children) children.
+(** This should be provable, but we'll skip it in the interest of time. *)
+Axiom superset_SAT : forall (p: PathCond) (be : BoolExp),
+ SAT (Pand be p) -> SAT p.
+
+(** A general proof of property 1 from the King paper, that the 
+  path condition never becomes identically false. 
+ hypothesis: prog , node, tree in node_eval relation...; 
+  for all of those things & more, if extract pc from node == pc and this pc is from a node in this relation*)
+Theorem property_1 : forall (prog: Program) (node: TreeNode) (tr : ExecutionTree),
+ node_eval prog node tr ->
+ SAT (extractPathCond node).
+Proof. 
+intros. induction H. 
+  (* E_Assign *)
+  - simpl in IHnode_eval. rewrite H1. apply IHnode_eval. 
+  (* E_IFSat *)
+  - simpl in IHnode_eval1. inversion H1. rewrite H1. apply H3. 
+  (* E_IFUnSAT *)
+   - simpl in IHnode_eval. rewrite H1. apply superset_SAT in IHnode_eval. apply IHnode_eval.  
+  (* E_GoTo *)
+  - simpl in IHnode_eval. rewrite H1. apply IHnode_eval.
+  (* E_WhileSAT *)
+  - simpl in IHnode_eval1. inversion H1. rewrite H1. apply H3. 
+  (* E_WhileUnSAT *)
+  - simpl in IHnode_eval. rewrite H1. apply superset_SAT in IHnode_eval. apply IHnode_eval. 
+  (* E_Finish *)
+   - destruct node. simpl. simpl in H1. rewrite H1. apply H2.
+Qed.
+
 
 (** The following is our execution of the program shown in Figure 1 of King's
     paper. We supply the symbolic execution tree corresponding to this program
@@ -477,7 +502,7 @@ Example prog_1_eval :
 Proof.
   apply E_Assign with (x := X) (ie := <{A + B}>) (se := <{A s+ B}>)
                       (st := empty_st) (n := O) (pc := none); try reflexivity.
-    unfold SAT. exists SAT_assign_ex_1. simpl. reflexivity.
+    unfold SAT. exists SAT_assign_ex_1. simpl. reflexivity. 
   apply E_Assign with (x := Y) (ie := <{B + C}>) (se := <{B s+ C}>)
                       (st := X !-> <{ A s+ B }>; empty_st)
                       (n := S O) (pc := none); try reflexivity.
@@ -493,10 +518,6 @@ Proof.
     unfold SAT. exists SAT_assign_ex_1. simpl. reflexivity.
 Qed.
 
-(* hypothesis: prog , node, tree in node_eval relation...; 
-  for all of those things & more, if extract pc from node == pc and this pc is from a node in this relation*)
-
-  
 Definition tree_1 := 
   (Tr (Node empty_st none 0) [(
     Tr (Node (X !-> <{sA s+ sB}> ; empty_st) none 1) [(
@@ -505,44 +526,133 @@ Definition tree_1 :=
                   X !-> <{sA s+ sB}> ; empty_st) none 3) nil
   )])])]).
 
-(** This should be provable, but we'll skip it in the interest of time. *)
-Axiom superset_SAT : forall (p: PathCond) (be : BoolExp),
- SAT (Pand be p) -> SAT p.
+(* Property 2 from the paper is that every leaf node is distinct, or in other words, no two 
+leaves have the same path condition. We represent the leaves as a list of the different path conditions
+for each example and prove that there are no duplicates for each. *)
+Definition leaves := list PathCond.
+Definition prog_1_leaves := [none].
 
-Theorem property_1 : forall (prog: Program) (node: TreeNode) (tr : ExecutionTree),
- node_eval prog node tr ->
- SAT (extractPathCond node).
-Proof. 
-intros. induction H. 
-  (* E_Assign *)
-  - simpl in IHnode_eval. rewrite H1. apply IHnode_eval. 
-  (* E_IFSat *)
-  - simpl in IHnode_eval1. inversion H1. rewrite H1. apply H3. 
-  (* E_IFUnSAT *)
-   - simpl in IHnode_eval. rewrite H1. apply superset_SAT in IHnode_eval. apply IHnode_eval.  
-  (* E_GoTo *)
-  - simpl in IHnode_eval. rewrite H1. apply IHnode_eval.
-  (* E_WhileSAT *)
-  - simpl in IHnode_eval1. inversion H1. rewrite H1. apply H3. 
-  (* E_WhileUnSAT *)
-  - simpl in IHnode_eval. rewrite H1. apply superset_SAT in IHnode_eval. apply IHnode_eval. 
-  (* E_Finish *)
-   - destruct node. simpl. simpl in H1. rewrite H1. apply H2.
+Definition get_head_pc (p : list PathCond) : PathCond :=
+ match p with
+  | [] => none
+  | h :: t => h
+ end.
+
+(* The proof of this property for the Sum example is trivial as there is no branching or control flow.*)
+Theorem property_2_ex_1 : forall (pc: PathCond),
+(get_head_pc prog_1_leaves) = pc -> ~ (In pc (tl prog_1_leaves)).
+Proof.
+intros. unfold not. unfold prog_1_leaves. simpl. intros. destruct H0. Qed.
+
+Definition J: string := "J".
+Definition sJ := Constant 1.
+Definition sY := Symbol Y.
+Definition sZ2 := Constant 1.
+Definition sX := Symbol X.
+
+
+(* Slightly Modified from the second example in paper. Instead of Y >= J, we have Y >=0 since
+ the paper claims that their ownly boolean operation is >= 0. *)
+Definition prog_2 := [<{Z := IntLit 1}>; 
+                      <{J := IntLit 1}>;
+                      <{if Y >= 0
+                        then [<{Z := Z * X }>;
+                              <{Y := Y - J}>;
+                                Go_To 2;
+                                Finish]
+                        else [Finish]
+                        end}>;
+                        Finish].
+
+Definition SAT_assign_prog_2_true_branch: concreteState := ( X !-> 0; Z !-> 1 ; _ !-> 0).
+Definition SAT_assign_prog_2_false_branch: concreteState := ( X !-> 0; Z !-> 1 ; Y !-> -2; _ !-> 0).
+
+Definition empty_st_2 := ( A !-> sA; B !-> sB; C !-> sC; J !-> sJ; Z !-> sZ2; Y !-> sY; X !-> sX; _ !-> (Constant 0)). 
+
+
+(* The axiom is so that the same if statement can be evaluated with a different symbolic value for Y after it's
+decremented. *)
+Axiom cond_after_1_iteration :
+findStatement prog_2 2 =
+<{
+if sY s- sJ >= 0
+then [<{ Z := Z * X }>;
+     <{ Y := Y - J }>;
+     <{ go_to S(S(O)) }>; Finish] else [Finish] end }>.
+
+(*This is the tree for the case that Y is 0, so the loop (made up of an if/then + go_to) only executes once.
+We prove that is a correct tree for the above prog_2. *)
+Example prog_2_eval :
+  node_eval prog_2 (Node empty_st_2 none 0)
+    (Tr (Node empty_st_2 none 0) [(
+      Tr (Node (Z !-> (Constant 1) ; empty_st_2) none 1) [(
+        Tr (Node (J !-> (Constant 1) ; Z !-> (Constant 1) ; empty_st_2) none 2) [(
+        Tr (Node (J !-> (Constant 1) ; Z !-> (Constant 1) ; empty_st_2) (Pand (Bge0 Y) none) 3) [(
+        Tr (Node (Z !-> <{sZ2 s* sX}>; J !-> (Constant 1) ; Z !-> (Constant 1) ; empty_st_2) (Pand (Bge0 Y) none) 4) [(
+        Tr (Node (Y !-> <{sY s- sJ}>; Z !-> <{sZ2 s* sX}>; J !-> (Constant 1) ; Z !-> (Constant 1) ; empty_st_2) (Pand (Bge0 Y) none) 5) [(
+        Tr (Node (Y !-> <{sY s- sJ}>; Z !-> <{sZ2 s* sX}>; J !-> (Constant 1) ; Z !-> (Constant 1) ; empty_st_2) (Pand (Bge0 Y) none) 2) [
+            Tr (Node (Y !-> <{sY s- sJ}>; Z !-> <{sZ2 s* sX}>;J !-> (Constant 1) ; Z !-> (Constant 1) ; empty_st_2) (Pand <{ ~ sY s- sJ >= 0 }>
+       (Pand <{ sY >= 0 }> none)) 6) nil]
+    )])])]);
+        Tr (Node (J !-> (Constant 1) ; Z !-> (Constant 1) ; empty_st_2) (Pand (Bnot (Bge0 Y)) none) 6) nil
+])])]).
+Proof.
+    (* Z := 1 *)
+    apply E_Assign with (x := Z) (ie := <{IntLit 1}>) (se := <{Constant 1}>)
+                      (st := empty_st_2) (n := O) (pc := none); try reflexivity.
+    unfold SAT. exists SAT_assign_prog_2_true_branch. simpl. reflexivity.
+    (* J := 1 *)
+    apply E_Assign with (x := J) (ie := <{IntLit 1}>) (se := <{Constant 1}>)
+                      (st := Z !-> (Constant 1) ; empty_st_2) (n := S O) (pc := none); try reflexivity.
+    unfold SAT. exists SAT_assign_prog_2_true_branch. simpl. reflexivity.
+    (* if Y >= 0. This is true for the first iteration. *)
+    apply E_IfSAT with (be := Bge0 sY) (then_body := [<{Z := Z * X }>;
+                              <{Y := Y - J}>;
+                                Go_To 2;
+                                Finish]) (else_body := [Finish])
+    (st := J !-> (Constant 1); Z !-> (Constant 1) ; empty_st_2) (n := S(S O)) (pc := none);
+    try reflexivity. unfold SAT. exists SAT_assign_prog_2_true_branch. simpl. reflexivity.
+    (* Z := Z * X  *)
+    apply E_Assign with (x := Z) (ie := <{Z * X}>) (se := <{sZ2 s* sX}>)
+    (st := J !-> (Constant 1); Z !-> (Constant 1) ; empty_st_2) (n := S(S(S O))) (pc := Pand <{ sY >= 0 }> none); try reflexivity.
+    unfold SAT. exists SAT_assign_prog_2_true_branch. simpl. reflexivity. 
+     (* Y := Y - J  *)
+    apply E_Assign with (x := Y) (ie := <{Y - J}>) (se := <{sY s- sJ}>)
+    (st := Z !-> <{sZ2 s* sX}>; J !-> (Constant 1); Z !-> (Constant 1) ; empty_st_2) (n := S(S(S(S O)))) (pc := Pand <{ sY >= 0 }> none); try reflexivity.
+    unfold SAT. exists SAT_assign_prog_2_true_branch. simpl. reflexivity.
+      (* Go_To 2. Jump back up to if statement *)
+     apply E_GoTo with (i := S(S(O))) (st := Y !-> <{sY s- sJ}>; Z !-> <{sZ2 s* sX}>; J !-> (Constant 1); Z !-> (Constant 1) ; empty_st_2) 
+    (n := S(S(S(S(S O))))) (pc := Pand <{ sY >= 0 }> none); try reflexivity.
+    unfold SAT. exists SAT_assign_prog_2_true_branch. simpl. reflexivity.
+      (* If Y >= 0. This is not true anymore. Have to use the above axiom for this case since
+      now Y has been updated to be the symbol sY - sJ, but the condition is only checking sY >=0.  *)
+    apply E_IfUnSAT with (be := Bge0 (SymSub sY sJ)) (then_body := [<{Z := Z * X }>;
+                                <{Y := Y - J}>;
+                                  Go_To 2; Finish]) (else_body := [Finish])(st := Y !-> <{sY s- sJ}>; Z !-> <{sZ2 s* sX}>; J !-> (Constant 1); Z !-> (Constant 1) ; empty_st_2) 
+    (n := S(S O)) (pc := Pand <{ sY >= 0 }> none); try reflexivity. 
+     unfold SAT. apply cond_after_1_iteration. exists SAT_assign_prog_2_true_branch. simpl. reflexivity.
+    (* Finish. This is the end of the road for the original true branch. *)  
+    apply E_Finish with (st := Y !-> <{sY s- sJ}>; Z !-> <{sZ2 s* sX}>; J !-> (Constant 1); Z !-> (Constant 1) ; empty_st_2) 
+    (n := S(S(S (S(S(S O)))))) (pc := (Pand <{ ~ sY s- sJ >= 0 }> (Pand <{ sY >= 0 }> none))); try reflexivity.
+   exists SAT_assign_prog_2_true_branch. simpl. reflexivity.
+    (* Finish. This is the end of the road for the original else branch. *)  
+    apply E_Finish with (st := J !-> (Constant 1); Z !-> (Constant 1) ; empty_st_2) 
+    (n := S(S(S (S(S(S O)))))) (pc := (Pand <{ ~ Y >= 0 }> none)); try reflexivity.
+   exists SAT_assign_prog_2_false_branch. simpl. reflexivity.
+Qed.
+
+Definition prog_2_leaves := [(Pand <{ ~ sY s- sJ >= 0 }> (Pand <{ sY >= 0 }> none));
+(Pand (Bnot (Bge0 Y)) none)].
+
+(* This proves that the first leaf node does not appear later in the  list of
+leaves. This is sufficient for this case where we just have two leaves, but the idea of the proof
+would be the same for more leaves, just having to repeat for the subsequent sublists of leaves.*)
+Theorem property_2_ex_2 : forall (pc :PathCond), 
+(get_head_pc prog_2_leaves) = pc -> ~ (In pc (tl prog_2_leaves)).
+ Proof.
+ intros. unfold not. unfold prog_2_leaves. intros. inversion H0. simpl in H. 
+  rewrite <- H in H1. discriminate H1. simpl in H1. destruct H1.
 Qed.
   
-(** Not in paper, but just trying some simple if/else. *)
-Definition prog_2 := [<{X := 2}>; 
-                      <{if X >= 0
-                        then [<{X := 3}>;
-                              <{Y := 4}>]
-                        else [<{X := 4}>;
-                              <{Y := 5}>]
-                        end}>].
 
-Definition stmt2_1 := findStatement prog_2 0.
-Compute stmt2_1.
-Definition stmt2_then := findStatement prog_2 2.
-Compute stmt2_then.
-Definition stmt2_else := findStatement prog_2 5.
-Compute stmt2_else.
 
