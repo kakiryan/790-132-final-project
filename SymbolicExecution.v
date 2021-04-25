@@ -121,14 +121,16 @@ Definition SAT (pc: PathCond) := exists (cs: concreteState), eval_pc pc cs = tru
 (** For example, The trivial path condition 'true' is satisfiable by the
     map that takes each symbolic variable to 0. *)
 Definition ex_pc := Pand BTrue none.
-Definition SAT_assign_ex_1: concreteState := ( _ !-> 0).
-
-(** When we evaluate ex_pc with this map, we get the boolean true. *)
-Compute eval_pc ex_pc SAT_assign_ex_1.
 Example ex_pc_sat : SAT ex_pc.
 Proof.
   unfold SAT. exists (( _ !-> ( 0))). simpl. reflexivity.
 Qed.
+
+(** When we evaluate ex_pc with this map, we get the boolean true. *)
+Definition SAT_assign_ex_1: concreteState := ( A !-> 1; B !-> 2; C!-> 1; X !-> 3; Y !-> 3; Z !-> 4; _ !-> ( 0)).
+Compute eval_pc ex_pc SAT_assign_ex_1.
+
+
 
 (** For another example, we prove that the path condition
     sA >= 0
@@ -654,5 +656,167 @@ Theorem property_2_ex_2 : forall (pc :PathCond),
   rewrite <- H in H1. discriminate H1. simpl in H1. destruct H1.
 Qed.
   
+(* ==========================Conventional Execution==============================================*)
 
+Inductive ConcreteTreeNode : Type :=
+  | ConcreteNode (s : concreteState) (pc : PathCond) (index : nat).
+
+Definition conventionalState := total_map IntExp.
+
+(** Getters to extract information from the ConcreteTreeNode object. *)
+
+Definition extractConventionalState (n : ConcreteTreeNode) : concreteState :=
+  match n with 
+  | ConcreteNode s _ _ => s
+  end. 
+
+Definition extractConventionalIndex (n : ConcreteTreeNode) : nat :=
+  match n with 
+  | ConcreteNode _ _ i => i
+  end.
+
+Definition extractConventionalPathCond (n : ConcreteTreeNode) : PathCond :=
+  match n with 
+  | ConcreteNode _ pc _ => pc
+  end.
+
+(** An ExecutionTree is either empty or a root node with a list of
+    child trees. *)
+Inductive ConcreteExecutionTree : Type :=
+  | null
+  | ConcreteTr (n : ConcreteTreeNode) (children : list ConcreteExecutionTree).
+
+Fixpoint conventional_inteval (ie: IntExp) (mappings:  concreteState) :=
+  match ie with 
+  | IntLit n => n
+  | IntAdd n1 n2 => (conventional_inteval n1 mappings) + (conventional_inteval n2  mappings)
+  | IntSub n1 n2 => (conventional_inteval n1 mappings ) - (conventional_inteval n2 mappings)
+  | IntMult n1 n2 => (conventional_inteval n1 mappings) * (conventional_inteval n2 mappings)
+  | IntId x => mappings x
+end.
+
+Inductive node_eval_conventional : Program -> ConcreteTreeNode -> ConcreteExecutionTree -> Prop :=
+  | E_AssignConcrete : forall prog node x ie st n pc tree',
+    extractConventionalState node = st ->
+    extractConventionalIndex node = n ->
+    extractConventionalPathCond node = pc ->
+    (SAT pc) ->
+    (findStatement prog n) = <{x := ie}> ->
+    node_eval_conventional prog (ConcreteNode (x !-> conventional_inteval ie st ; st) pc (n+1)) tree' ->
+    node_eval_conventional prog node (ConcreteTr node [tree'])
+
+  | E_IfSATConcrete : forall prog node be then_body else_body st n pc tree1' tree2',
+    extractConventionalState node = st ->
+    extractConventionalIndex node = n ->
+    extractConventionalPathCond node = pc ->
+    (findStatement prog n) = <{if be then then_body else else_body end}> ->
+    (SAT pc) -> 
+    node_eval_conventional prog (ConcreteNode st (Pand be pc) (n+1)) tree1' ->
+    node_eval_conventional prog (ConcreteNode st (Pand (Bnot be) pc) (n + (length then_body))) tree2' ->
+    node_eval_conventional prog node (ConcreteTr node [tree1' ; tree2'])
+
+  | E_IfUnSATConcrete : forall prog node be then_body else_body st n pc tree,
+    extractConventionalState node = st ->
+    extractConventionalIndex node = n ->
+    extractConventionalPathCond node = pc ->
+    (findStatement prog n) = <{if be then then_body else else_body end}> ->
+    (SAT (Pand (Bnot be) pc)) ->
+    node_eval_conventional prog (ConcreteNode st (Pand (Bnot be) pc) (n + (length then_body))) tree ->
+    node_eval_conventional prog node (ConcreteTr node [tree])
+
+  | E_GoToConcrete: forall prog node i st n pc tree',
+    extractConventionalState node = st ->
+    extractConventionalIndex node = n ->
+    extractConventionalPathCond node = pc ->
+    (SAT pc) ->
+    (findStatement prog n) = <{go_to i}> ->
+    node_eval_conventional prog (ConcreteNode st pc i) tree' ->
+    node_eval_conventional prog node (ConcreteTr node [tree'])
+
+  | E_WhileSATConcrete: forall prog node be body st n pc tree1' tree2',
+    extractConventionalState node = st ->
+    extractConventionalIndex node = n ->
+    extractConventionalPathCond node = pc ->
+    (findStatement prog n) = <{while be do body end}> ->
+    (SAT pc) ->
+    node_eval_conventional prog (ConcreteNode st (Pand be pc) (n + 1)) tree1' ->
+    node_eval_conventional prog (ConcreteNode st (Pand (Bnot be) pc) (n + (length body))) tree1' ->
+    node_eval_conventional prog node (ConcreteTr node [tree1' ; tree2'])
+
+  | E_WhileUnSATConcrete: forall prog node be body st n pc tree,
+    extractConventionalState node = st ->
+    extractConventionalIndex node = n ->
+    extractConventionalPathCond node = pc ->
+    (findStatement prog n) = <{while be do body end}> ->
+    (SAT (Pand (Bnot be) pc)) ->
+    node_eval_conventional prog (ConcreteNode st (Pand (Bnot be) pc) (n + (length body))) tree ->
+    node_eval_conventional prog node (ConcreteTr node [tree])
+
+  | E_FinishConcrete: forall prog node st n pc,
+    extractConventionalState node = st ->
+    extractConventionalIndex node = n ->
+    extractConventionalPathCond node = pc ->
+    (SAT pc) ->
+    (findStatement prog n) = Finish ->
+    node_eval_conventional prog node (ConcreteTr node []).
+
+Print prog_1.
+
+Definition start_state_1: concreteState := ( A !-> 1; B !-> 2; C!-> 1; X !-> 0; Y !-> 0; Z !-> 0; _ !-> ( 0)).
+Definition intermediate_state_1: concreteState := ( A !-> 1; B !-> 2; C!-> 1; X !-> 3; Y !-> 3; Z !-> 0; _ !-> ( 0)).
+(* Same as SAT_assign_1 above for the symbolic execution of prog 1 *)
+Definition final_state_1: concreteState := ( A !-> 1; B !-> 2; C!-> 1; X !-> 3; Y !-> 3; Z !-> 4; _ !-> ( 0)).
+
+(* Proof the following concrete execution tree is correct for prog 1.*)
+Example prog_1_eval_conventional :
+  node_eval_conventional prog_1 (ConcreteNode start_state_1 none 0)
+    (ConcreteTr (ConcreteNode start_state_1 none 0) [(
+      ConcreteTr (ConcreteNode (X !-> start_state_1 A + start_state_1 B; start_state_1) none 1) [(
+        ConcreteTr (ConcreteNode (Y !-> start_state_1 B + start_state_1 C; X !-> start_state_1 A + start_state_1 B ; start_state_1) none 2) [(
+          ConcreteTr (ConcreteNode (Z !-> intermediate_state_1 X + intermediate_state_1 Y  - start_state_1 B; Y !-> start_state_1 B + start_state_1 C;
+                    X !-> start_state_1 A + start_state_1 B; start_state_1) none 3) nil
+    )])])]).
+Proof.
+  apply E_AssignConcrete with (x := X) (ie := <{A + B}>)
+                      (st := start_state_1) (n := O) (pc := none); try reflexivity.
+    unfold SAT. exists final_state_1. simpl. reflexivity. 
+  apply E_AssignConcrete with (x := Y) (ie := <{B + C}>) 
+                      (st := X !-> start_state_1 A + start_state_1 B; start_state_1)
+                      (n := S O) (pc := none); try reflexivity.
+    unfold SAT. exists final_state_1. simpl. reflexivity.
+  apply E_AssignConcrete with (x := Z ) (ie := <{X + Y - B}>)
+                      (st := Y !-> start_state_1 B + start_state_1 C; X !-> start_state_1 A + start_state_1 B ; start_state_1)
+                      (n := S (S O)) (pc := none); try reflexivity.
+    unfold SAT. exists final_state_1. simpl. reflexivity.
+  apply E_FinishConcrete with (st := Z !-> intermediate_state_1 X + intermediate_state_1 Y  - start_state_1 B; Y !-> start_state_1 B + start_state_1 C;
+                    X !-> start_state_1 A + start_state_1 B; start_state_1)
+                      (n := S (S (S O))) (pc := none); try reflexivity.
+    unfold SAT. exists final_state_1. simpl. reflexivity.
+Qed.
+
+Definition prog_1_conventional_tree :=   node_eval_conventional prog_1 (ConcreteNode start_state_1 none 0)
+    (ConcreteTr (ConcreteNode start_state_1 none 0) [(
+      ConcreteTr (ConcreteNode (X !-> start_state_1 A + start_state_1 B; start_state_1) none 1) [(
+        ConcreteTr (ConcreteNode (Y !-> start_state_1 B + start_state_1 C; X !-> start_state_1 A + start_state_1 B ; start_state_1) none 2) [(
+          ConcreteTr (ConcreteNode (Z !-> intermediate_state_1 X + intermediate_state_1 Y  - start_state_1 B; Y !-> start_state_1 B + start_state_1 C;
+                    X !-> start_state_1 A + start_state_1 B; start_state_1) none 3) nil
+    )])])]).
+
+Definition final_concrete_node := ConcreteNode (Z !-> intermediate_state_1 X + intermediate_state_1 Y  - start_state_1 B; Y !-> start_state_1 B + start_state_1 C;
+                    X !-> start_state_1 A + start_state_1 B; start_state_1) none 3.
+
+Definition ex_1_states_equivalent (s1 s2 : concreteState) : bool :=
+  if  Z.eqb (s1 X) (s2 X) then 
+  if Z.eqb (s1 Y) (s2 Y) then 
+  if Z.eqb (s1 Z) (s2 Z) then 
+  if Z.eqb (s1 A) (s2 A) then 
+  if Z.eqb (s1 B) (s2 B) then 
+  if Z.eqb (s1 C) (s2 C) then true else false else false else false else false else false else false.
+              
+(* The final state of the concrete execution tree is the same as the SAT_assignment
+  for the symbolic execution of the same example.*)                     
+Theorem eval_1_commutative : 
+  ex_1_states_equivalent (extractConventionalState final_concrete_node) SAT_assign_ex_1 = true.
+Proof.
+simpl. reflexivity. Qed.
 
