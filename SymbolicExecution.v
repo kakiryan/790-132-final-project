@@ -671,41 +671,79 @@ Qed.
 
 Definition prog_3 := [<{X := A}>;
                       <{while X >= 0 do
-                        [<{X := X - (IntLit 1)}>; Finish] end}>;
+                        [<{X := X - (IntLit 1)}>; Go_To 1; Finish] end}>;
                       Finish].
 
-Definition empty_st_3 := t_update empty_st A (Constant 0).
+Definition empty_st_3 := ( A !-> sA; _ !-> (Constant 0)).
+
+Definition SAT_assignment_3: concreteState := (X !-> 0; A !-> 0; _ !-> ( 0)).
+
+Axiom prog3_after_1_iteration :
+findStatement prog_3 1 =
+<{
+while sX s- (Constant 1) >= 0
+do [<{ X := X - (IntLit 1) }>;
+   Go_To 1; Finish] end }>.
 
 Example prog_3_eval :
   node_eval prog_3 (Node empty_st_3 none 0)
     (* Initial, empty execution state *)
     (Tr (Node empty_st_3 none 0) [
       (* After instruction 0 : update state mapping *)
-      Tr (Node (X !-> (Constant 0) ; empty_st_3) none 1) [
+      Tr (Node (X !-> A ; empty_st_3) none 1) [(
         (* After instruction 1, first branch:
            add boolean expression to PC and go into loop body *)
-        Tr (Node (X !-> (Constant 0) ; empty_st_3) 
+        Tr (Node (X !-> A ; empty_st_3) 
            (Pand <{X >= 0}> none) 2) [
           (* Then execute loop body by updating the value of X *)
-          Tr (Node (X !-> (Constant (Z.opp 1)) ; empty_st_3)
+          Tr (Node (X !-> <{A s- Constant 1}> ; X !-> A; empty_st_3)
              (Pand <{X >= 0}> none) 3) [
             (* Then Finish (execution stops??) *)
-            Tr (Node (X !-> (Constant (Z.opp 1)) ; empty_st_3)
-               (Pand <{X >= 0}> none) 4) []
+            Tr (Node (X !-> <{A s- Constant 1}> ; X !-> A; empty_st_3)
+               (Pand <{X >= 0}> none) 1) [
+                Tr (Node (X !-> <{A s- Constant 1}> ; X !-> A; empty_st_3)
+               (      Pand <{ ~ sX s- (Constant 1) >= 0 }>
+        (Pand <{ X >= 0 }> none)) 4) nil
+
+            ]
           ]
-        ];
+        ]
         (* After instruction 1, second branch:
            add negation of boolean expression to PC and skip loop *)
-        Tr (Node (X !-> (Constant 0) ; empty_st_3)
-           (Pand (Bnot <{X >= 0}>) none) 4) [
-          (* Nothing comes after the loop, so halt execution *)
-          Tr (Node (X !-> (Constant 0) ; empty_st_3)
-             (Pand (Bnot <{X >= 0}>) none) 4) []
-        ]
-      ]
+      );         Tr (Node (X !-> A ; empty_st_3)
+           (Pand (Bnot <{X >= 0}>) none) 4) nil ]
     ]).
-Proof. Abort.
-  
+Proof. 
+(* X := A *)
+apply E_Assign with (x := X) (ie := <{IntId A}>) (se := sA)
+                      (st := empty_st_3) (n := O) (pc := none); try reflexivity.
+unfold SAT. exists SAT_assignment_3. reflexivity.
+(* While X >= 0 *)
+apply E_WhileSAT with (be := Bge0 sX) (body := [<{X := X - (IntLit 1)}>; Go_To 1; Finish])
+    (st := X !-> A;  empty_st_3) (n := S O) (pc := none);
+  try reflexivity.
+unfold SAT. exists SAT_assignment_3. reflexivity.
+(* X := X - 1 *)
+apply E_Assign with (x := X) (ie := <{X - IntLit 1}>) (se := <{A s- Constant 1}>)
+                      (st :=  X !-> A; empty_st_3) (n := S ( S O)) (pc := Pand <{X >= 0}> none); 
+try reflexivity.
+unfold SAT. exists SAT_assignment_3. simpl. reflexivity. 
+(* GoTo Top of While **)
+apply E_GoTo with (i := S(O)) (st :=  X !-> <{A s- Constant 1}>; X !-> A; empty_st_3)(n :=  S ( S (S O)))(pc := Pand <{X >= 0}> none); 
+try reflexivity.
+unfold SAT. exists SAT_assignment_3. simpl. reflexivity. 
+(* While X >=0 (this time its not) **)
+apply E_WhileUnSAT with (body := [<{X := X - (IntLit 1)}>; Go_To 1; Finish]) (be := Bge0 (SymSub sX (Constant 1))) (st :=  X !-> <{A s- Constant 1}>; X !-> A; empty_st_3)(n :=  S O)(pc := Pand <{X >= 0}> none);
+try reflexivity. apply prog3_after_1_iteration.
+unfold SAT. exists SAT_assignment_3. simpl. reflexivity. 
+(* Done with `true` branch **)
+apply E_Finish with (st :=  X !-> <{A s- Constant 1}>; X !-> A; empty_st_3)(n :=  S( S ( S (S  O))))(pc := Pand <{ ~ sX s- (Constant 1) >= 0 }>
+        (Pand <{ X >= 0 }> none));
+try reflexivity. unfold SAT. exists SAT_assignment_3. simpl. reflexivity. 
+(* Done with `false` branch (loop never executes**)
+apply E_Finish with (st :=  X !-> A; empty_st_3)(n :=  S( S (S ( S (S O)))))(pc := Pand <{ ~ sX >= 0 }> none);
+try reflexivity. unfold SAT. exists SAT_assignment_3. simpl. reflexivity.
+
 (* ========================== Definiton of Conventional Execution  ==============================================*)
 
 (* This section will define a conventional (concrete) execution in order for us to then prove the commutativity
