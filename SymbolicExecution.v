@@ -430,7 +430,7 @@ Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
     (findStatement prog n) = <{while be do body end}> ->
     (SAT pc) ->
     node_eval prog (Node st (Pand be pc) (n + 1)) tree1' ->
-    node_eval prog (Node st (Pand (Bnot be) pc) (n + (length body))) tree1' ->
+    node_eval prog (Node st (Pand (Bnot be) pc) (n + (length body)+ 1)) tree2' ->
     node_eval prog node (Tr node [tree1' ; tree2'])
 
 (** If the path condition is unsatisfiable, we unconditionally skip the loop body,
@@ -442,7 +442,7 @@ Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
     extractPathCond node = pc ->
     (findStatement prog n) = <{while be do body end}> ->
     (SAT (Pand (Bnot be) pc)) ->
-    node_eval prog (Node st (Pand (Bnot be) pc) (n + (length body))) tree ->
+    node_eval prog (Node st (Pand (Bnot be) pc) (n + (length body) + 1)) tree ->
     node_eval prog node (Tr node [tree])
 
 (** When the Finish statement is evaluated, it generates no child nodes. *)
@@ -676,7 +676,10 @@ Definition prog_3 := [<{X := A}>;
 
 Definition empty_st_3 := ( A !-> sA; _ !-> (Constant 0)).
 
-Definition SAT_assignment_3: concreteState := (X !-> 0; A !-> 0; _ !-> ( 0)).
+(* SAT assign for iterating once and stopping *)
+Definition SAT_assignment_3_1: concreteState := (X !-> 0; A !-> 0; _ !-> ( 0)).
+(* SAT assign for never looping *)
+Definition SAT_assignment_3_2: concreteState := (X !-> -1; A !-> -1; _ !-> ( 0)).
 
 Axiom prog3_after_1_iteration :
 findStatement prog_3 1 =
@@ -685,64 +688,64 @@ while sX s- (Constant 1) >= 0
 do [<{ X := X - (IntLit 1) }>;
    Go_To 1; Finish] end }>.
 
+Print prog_2_eval.
+    
+
 Example prog_3_eval :
   node_eval prog_3 (Node empty_st_3 none 0)
-    (* Initial, empty execution state *)
-    (Tr (Node empty_st_3 none 0) [
-      (* After instruction 0 : update state mapping *)
-      Tr (Node (X !-> A ; empty_st_3) none 1) [(
-        (* After instruction 1, first branch:
-           add boolean expression to PC and go into loop body *)
-        Tr (Node (X !-> A ; empty_st_3) 
-           (Pand <{X >= 0}> none) 2) [
-          (* Then execute loop body by updating the value of X *)
+    (* X := A*)
+    (Tr (Node empty_st_3 none 0) [(
+      (* while x >=0 *)
+    Tr (Node (X !-> A ; empty_st_3) none 1) [(
+        (* X = X -1  *)
+    Tr (Node (X !-> A ; empty_st_3) 
+           (Pand <{X >= 0}> none) 2) [(
+          (* GoTo *)
           Tr (Node (X !-> <{A s- Constant 1}> ; X !-> A; empty_st_3)
-             (Pand <{X >= 0}> none) 3) [
-            (* Then Finish (execution stops??) *)
+             (Pand <{X >= 0}> none) 3) [(
+            (* While_unsat *)
             Tr (Node (X !-> <{A s- Constant 1}> ; X !-> A; empty_st_3)
-               (Pand <{X >= 0}> none) 1) [
+               (Pand <{X >= 0}> none) 1) [(
+                (* finish *)
                 Tr (Node (X !-> <{A s- Constant 1}> ; X !-> A; empty_st_3)
                (      Pand <{ ~ sX s- (Constant 1) >= 0 }>
-        (Pand <{ X >= 0 }> none)) 4) nil
-
-            ]
-          ]
-        ]
-        (* After instruction 1, second branch:
-           add negation of boolean expression to PC and skip loop *)
-      );         Tr (Node (X !-> A ; empty_st_3)
-           (Pand (Bnot <{X >= 0}>) none) 4) nil ]
-    ]).
+        (Pand <{ X >= 0 }> none)) 5) nil
+)])])]);        
+        (* unsat/finish*)
+      Tr (Node (X !-> A ; empty_st_3)  (Pand  <{ ~X >= 0}> none) 5) nil 
+    ])]).
 Proof. 
 (* X := A *)
 apply E_Assign with (x := X) (ie := <{IntId A}>) (se := sA)
                       (st := empty_st_3) (n := O) (pc := none); try reflexivity.
-unfold SAT. exists SAT_assignment_3. reflexivity.
+unfold SAT. exists SAT_assignment_3_1. reflexivity.
 (* While X >= 0 *)
 apply E_WhileSAT with (be := Bge0 sX) (body := [<{X := X - (IntLit 1)}>; Go_To 1; Finish])
     (st := X !-> A;  empty_st_3) (n := S O) (pc := none);
   try reflexivity.
-unfold SAT. exists SAT_assignment_3. reflexivity.
+unfold SAT. exists SAT_assignment_3_1. reflexivity.
 (* X := X - 1 *)
 apply E_Assign with (x := X) (ie := <{X - IntLit 1}>) (se := <{A s- Constant 1}>)
                       (st :=  X !-> A; empty_st_3) (n := S ( S O)) (pc := Pand <{X >= 0}> none); 
 try reflexivity.
-unfold SAT. exists SAT_assignment_3. simpl. reflexivity. 
+unfold SAT. exists SAT_assignment_3_1. simpl. reflexivity. 
 (* GoTo Top of While **)
 apply E_GoTo with (i := S(O)) (st :=  X !-> <{A s- Constant 1}>; X !-> A; empty_st_3)(n :=  S ( S (S O)))(pc := Pand <{X >= 0}> none); 
 try reflexivity.
-unfold SAT. exists SAT_assignment_3. simpl. reflexivity. 
+unfold SAT. exists SAT_assignment_3_1. simpl. reflexivity. 
 (* While X >=0 (this time its not) **)
 apply E_WhileUnSAT with (body := [<{X := X - (IntLit 1)}>; Go_To 1; Finish]) (be := Bge0 (SymSub sX (Constant 1))) (st :=  X !-> <{A s- Constant 1}>; X !-> A; empty_st_3)(n :=  S O)(pc := Pand <{X >= 0}> none);
 try reflexivity. apply prog3_after_1_iteration.
-unfold SAT. exists SAT_assignment_3. simpl. reflexivity. 
+unfold SAT. exists SAT_assignment_3_1. simpl. reflexivity. 
 (* Done with `true` branch **)
-apply E_Finish with (st :=  X !-> <{A s- Constant 1}>; X !-> A; empty_st_3)(n :=  S( S ( S (S  O))))(pc := Pand <{ ~ sX s- (Constant 1) >= 0 }>
+apply E_Finish with (st :=  X !-> <{A s- Constant 1}>; X !-> A; empty_st_3)(n :=  S( S ( S (S(S O)))))
+(pc := Pand <{ ~ sX s- (Constant 1) >= 0 }>
         (Pand <{ X >= 0 }> none));
-try reflexivity. unfold SAT. exists SAT_assignment_3. simpl. reflexivity. 
+try reflexivity. unfold SAT. exists SAT_assignment_3_1. simpl. reflexivity. 
 (* Done with `false` branch (loop never executes**)
 apply E_Finish with (st :=  X !-> A; empty_st_3)(n :=  S( S (S ( S (S O)))))(pc := Pand <{ ~ sX >= 0 }> none);
-try reflexivity. unfold SAT. exists SAT_assignment_3. simpl. reflexivity.
+try reflexivity. unfold SAT. exists SAT_assignment_3_2. simpl. reflexivity.
+Qed.
 
 (* ========================== Definiton of Conventional Execution  ==============================================*)
 
@@ -852,7 +855,7 @@ Inductive node_eval_conventional : Program -> ConcreteTreeNode -> ConcreteExecut
 
 (* ========================== End Definiton of Conventional Execution  ==============================================*)
 
-(* ========================== Proof of Property 3 for Program  ==============================================*)
+(* ========================== Proof of Property 3 for Program 1 ==============================================*)
 Definition start_state_1: concreteState := ( A !-> 1; B !-> 2; C!-> 1; X !-> 0; Y !-> 0; Z !-> 0; _ !-> ( 0)).
 Definition intermediate_state_1: concreteState := ( A !-> 1; B !-> 2; C!-> 1; X !-> 3; Y !-> 3; Z !-> 0; _ !-> ( 0)).
 Definition final_state_1: concreteState := ( A !-> 1; B !-> 2; C!-> 1; X !-> 3; Y !-> 3; Z !-> 4; _ !-> ( 0)).
