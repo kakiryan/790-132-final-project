@@ -6,23 +6,26 @@ From LF Require Import Maps.
 From Coq Require Import Lists.List.
 Import ListNotations.
 
-(* What we have done:
- - all of minimum goal
- - standard goal
-    * Property 1: prove generally that PC never identically false
-    * Property 2: proved for example 1 & example 2 in paper
- - reach goal
-    * Property 3: prove for example 1 
- - proving the trees for each example are correct 
+(* Table of Contents:
+ - Definition Symbolic Execution Concepts (Minimum goal)
+ - General Proof of Property 1 (Standard Goal)
+ - Proof of Property 2 for:  (Standard Goal)
+    * Figure 1 in King Paper
+    * Modified Figure 2 in King Paper
+    * While loop example
+ - Proof of Property 2 for: (Reach Goal)
+    * Figure 1 in King Paper
+    * Modified Figure 2 in King Paper
+    * While loop example
 
- Need to do:
- - More commnts & clean up
- - Simple loop example. 
- - Commutativity ex 2*)
-
+  Property 1: Path condition is never identically false. 
+  Property 2: All leave nodes in a symbolic execution tree are distinct. 
+  Property 3: Symbolic execution is commutative. *)
 
 Declare Custom Entry com.
 Declare Scope com_scope.
+
+(* ================= Start: Definition of Symbolic Execution Concepts. ================*)
 
 (** Inspired by the AExp from the Imp chapter. The only difference is that 
 we are using the built-in integer type, Z. The Integer language as defined in
@@ -35,6 +38,8 @@ Inductive IntExp : Type :=
 | IntMult (n1 n2: IntExp)
 | IntId (x : string).
 
+(** The state of a program during symbolic execution is represtented by a total map
+of symbolic expressions. *)
 Inductive SymbolicExp : Type :=
   | Symbol (s: string)
   | SymAdd (s1 s2: SymbolicExp)
@@ -42,14 +47,17 @@ Inductive SymbolicExp : Type :=
   | SymMult (s1 s2: SymbolicExp)
   | Constant (n : Z).
 
-(* Also inspired by the BExp from Imp.*)
+(* Also inspired by the BExp from Imp. The only boolean expression allowed in the 
+ King paper is the check that something is >=, so we only provide support for that
+ case as well as negation.*)
 Inductive BoolExp : Type :=
   | BTrue
   | BFalse
   | Bnot (b : BoolExp)
   | Bge0 (n : SymbolicExp).
 
-(* We represent a program state as a map of integer expressions and symbolic values. *)
+(* We represent a symbolic program state as a total map of symbolic expressions
+  and the concrete state is a total map of Integers. *)
 Definition state := total_map SymbolicExp.
 Definition concreteState := total_map Z.
 
@@ -58,6 +66,7 @@ Inductive PathCond : Type :=
 | none
 | Pand (be : BoolExp) (p : PathCond).
             
+(* This function is used to concretize a symbolic expression given a concrete state. *)
 Fixpoint substitute (se: SymbolicExp) (mappings: concreteState): Z  :=
   match se with
   | Symbol s => mappings s
@@ -67,6 +76,8 @@ Fixpoint substitute (se: SymbolicExp) (mappings: concreteState): Z  :=
   | Constant n => n
   end.
 
+(* This function is used to evaluate an integer expression, similar to Imp but taking
+  into account our notion of program state. *)
 Fixpoint inteval (ie: IntExp) (s: state) (mappings:  concreteState) : Z :=
   match ie with 
   | IntLit n => n
@@ -76,6 +87,9 @@ Fixpoint inteval (ie: IntExp) (s: state) (mappings:  concreteState) : Z :=
   | IntId x => substitute (s x) mappings
 end.
 
+
+(* This function is used to evaluate a boolean expression, similar to Imp but taking
+  into account our notion of program state. *)
 Fixpoint beval (b : BoolExp) (mappings: concreteState) : bool :=
   match b with
   | BTrue   => true
@@ -84,6 +98,7 @@ Fixpoint beval (b : BoolExp) (mappings: concreteState) : bool :=
   | Bge0 n => 0 <=? substitute n mappings
   end.
 
+(* This function is used to evaluate a path condition given a concrete state. *)
 Fixpoint eval_pc (pc: PathCond) (mappings: concreteState ) : bool :=
   match pc with 
   | none => true
@@ -132,7 +147,6 @@ Definition SAT_assign_ex_1: concreteState := ( A !-> 1; B !-> 2; C!-> 1; X !-> 3
 Compute eval_pc ex_pc SAT_assign_ex_1.
 
 
-
 (** For another example, we prove that the path condition
     sA >= 0
     is satisfiable by the map that takes sA to 1 and all other symbolic
@@ -144,7 +158,6 @@ Example ex_pc_sat_2 : SAT ex_pc_2.
 Proof.
   unfold SAT. exists (A !-> 1; ( _ !-> ( 0))). simpl. reflexivity.
 Qed.
-
 
 (** A TreeNode represents one node of our symbolic execution tree.
     It contains a program state, path condition, and an index
@@ -182,7 +195,7 @@ Inductive ExecutionTree : Type :=
     an ordering of statements in a list, called a Program. 
 
     In addition to basic assignment, we provide support for the same control 
-    flow structures as in the original paper -- if/else, while loops,
+    flow structures as in the King paper -- if/else, while loops,
     and function calls modeled by go_tos.
 
     - Assignment statements require a variable name (string) and an integer expression.
@@ -210,6 +223,8 @@ Inductive Statement :=
 (** As mentioned above, each program is represented as a list of statements. *)
 Definition Program := list Statement.
 
+(** This function is used to compute the length of a program. The gas parameter is needed so that Coq can 
+ verify our recursion is decreasing. *)
 Fixpoint progLength (prog : Program) (gas : nat) : nat :=
   match gas with
   | O => O 
@@ -248,13 +263,16 @@ Fixpoint progLength (prog : Program) (gas : nat) : nat :=
     statements in the then block and two in the else block, the indices of the
     then block would be 3, 4 and the else block would be 5, 6.
 
-    Under this model, we can calculate the offsets into our `then` (th) and `else` (e) lists by simple operations
-    over the lengths of the lists. For example, if the desired index is greater than the length of the then block,
-    we know the desired statement is either in the else block or outside of the if/else statement entirely.
+    Under this model, we can calculate the offsets into our `then` (th) and `else` (e) 
+    lists by simple operations over the lengths of the lists. For example, if the desired 
+    index is greater than the length of the then block, we know the desired statement is 
+    either in the else block or outside of the if/else statement entirely.
 *)
 
+(* Constant for default gas parameter.*)
 Definition MAX_PROG_LENGTH := 1000%nat.
 
+(* This function returns the statement in our program at index i. *)
 Fixpoint findStatement (prog : Program) (i : nat) : Statement :=
   match i with 
   | O => match prog with 
@@ -290,11 +308,9 @@ Fixpoint findStatement (prog : Program) (i : nat) : Statement :=
   end
 end.
 
-
 (** The following notation is inspired by the Imp chapter,
     with some minor modifications.*)
 Coercion IntId : string >-> IntExp.
-(*Coercion IntLit : Z >-> IntExp.*)
 Coercion Symbol : string >-> SymbolicExp.
 Notation "<{ e }>" := e (at level 0, e custom com at level 99) : com_scope.
 Notation "( x )" := x (in custom com, x at level 99) : com_scope.
@@ -320,10 +336,6 @@ Notation "'true'"  := BTrue (in custom com at level 0).
 Notation "'false'"  := false (at level 1).
 Notation "'false'"  := BFalse (in custom com at level 0).
 Notation "x >= 0" := (Bge0 x) (in custom com at level 70, no associativity).
-(*Notation "x && y" := (Band x y)
-  (in custom com at level 80, left associativity).
-Notation "x || y" := (Bor x y)
-  (in custom com at level 80, left associativity). *)
 Notation "'~' b"  := (Bnot b)
   (in custom com at level 75, right associativity).
 Notation "x := y" :=
@@ -343,7 +355,6 @@ Reserved Notation
          (at level 40, c custom com at level 99,
           st constr, st' constr at next level).
 
-(* Notation "x '!->' v" := (x !-> v ; empty_st) (at level 100). *)
 Open Scope com_scope. 
 
 (* Inspired by Imp's aeval. This will convert an IntExp into a SymbolicExp. *)
@@ -454,9 +465,15 @@ Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
     (findStatement prog n) = Finish ->
     node_eval prog node (Tr node []).
 
-(** This should be provable, but we'll skip it in the interest of time. *)
+(** This should be provable, but we'll skip it in the interest of time. It is stating
+  that if a superset of a condition is satisfiable, then the condition itself is 
+  satisfiable. *)
 Axiom superset_SAT : forall (p: PathCond) (be : BoolExp),
  SAT (Pand be p) -> SAT p.
+
+(* ================== End: Definition Symbolic Execution Concepts. ==================*)
+
+(* ========================= Start: Proof of Property 1. ============================*)
 
 (** A general proof of property 1 from the King paper, that the 
   path condition never becomes identically false. 
@@ -483,7 +500,10 @@ intros. induction H.
    - destruct node. simpl. simpl in H1. rewrite H1. apply H2.
 Qed.
 
-(* ====================== Proof of Property 2 for Program 1. ======================*)
+(* ========================= End: Proof of Property 1. ===============================*)
+
+(* ====================== Start: Proof of Property 2 for Program 1. ===================*)
+
 (** The following is our execution of the program shown in Figure 1 of King's
     paper. We supply the symbolic execution tree corresponding to this program
     (which is just a simple list of nodes, with no branching), and prove that
@@ -503,13 +523,16 @@ Example prog_1_eval :
                     X !-> <{sA s+ sB}> ; empty_st) none 3) nil
     )])])]).
 Proof.
+  (* X := A + B *)
   apply E_Assign with (x := X) (ie := <{A + B}>) (se := <{A s+ B}>)
                       (st := empty_st) (n := O) (pc := none); try reflexivity.
     unfold SAT. exists SAT_assign_ex_1. simpl. reflexivity. 
+  (* Y := B + C *)
   apply E_Assign with (x := Y) (ie := <{B + C}>) (se := <{B s+ C}>)
                       (st := X !-> <{ A s+ B }>; empty_st)
                       (n := S O) (pc := none); try reflexivity.
     unfold SAT. exists SAT_assign_ex_1. simpl. reflexivity.
+ (* Z := X + Y  - B *)  
   apply E_Assign with (x := Z ) (ie := <{X + Y - B}>)
                       (se := <{(sA s+ sB) s+ (sB s+ sC) s- sB}>)
                       (st := Y !-> <{sB s+ sC}> ; X !-> <{sA s+ sB}> ; empty_st)
@@ -521,8 +544,8 @@ Proof.
     unfold SAT. exists SAT_assign_ex_1. simpl. reflexivity.
 Qed.
 
-(* Now that we have proven that this is the correct symbolic execution tree for the program,
- we will refer to it as tree_1 *)
+(* Now that we have proven that this is the correct symbolic execution tree for the 
+  program, we will refer to it as tree_1 *)
 Definition tree_1 := 
   (Tr (Node empty_st none 0) [(
     Tr (Node (X !-> <{sA s+ sB}> ; empty_st) none 1) [(
@@ -537,20 +560,22 @@ for each example and prove that there are no duplicates for each. *)
 Definition leaves := list PathCond.
 Definition prog_1_leaves := [none].
 
-Definition get_head_pc (p : list PathCond) : PathCond :=
+Definition get_head_pc (p : leaves) : PathCond :=
  match p with
   | [] => none
   | h :: t => h
  end.
 
-(* The proof of this property for the Sum example is trivial as there is no branching or control flow.*)
+(* The proof of this property for the first example is trivial as there is no 
+branching or control flow.*)
+
 Theorem property_2_ex_1 : forall (pc: PathCond),
 (get_head_pc prog_1_leaves) = pc -> ~ (In pc (tl prog_1_leaves)).
 Proof.
 intros. unfold not. unfold prog_1_leaves. simpl. intros. destruct H0. Qed.
-(* ====================== End Proof of Property 2 for Program 1. ======================*)
+(* ====================== End: Proof of Property 2 for Program 1. ======================*)
 
-(* ======================  Proof of Property 2 for Program 2. ======================*)
+(* ====================== Start: Proof of Property 2 for Program 2. ======================*)
 
 (* Setting up new variable names for example 2. *)
 Definition J: string := "J".
@@ -560,8 +585,9 @@ Definition sZ2 := Constant 1.
 Definition sX := Symbol X.
 
 
-(* Slightly Modified from the second example in paper. Instead of Y >= J, we have Y >=0 since
- the paper claims that their ownly boolean operation is >= 0. *)
+(* The following program is slightly modified from the program in figure 2 of the King
+ paper. Instead of Y >= J, we have Y >=0 since the paper claims that their only boolean 
+  operation is >= 0. *)
 Definition prog_2 := [<{Z := IntLit 1}>; 
                       <{J := IntLit 1}>;
                       <{if Y >= 0
@@ -573,14 +599,20 @@ Definition prog_2 := [<{Z := IntLit 1}>;
                         end}>;
                         Finish].
 
+(* A satisfying assignment for taking the true branch *)
 Definition SAT_assign_prog_2_true_branch: concreteState := ( X !-> 1; Y !-> 0 ; _ !-> 0).
+
+(* A satisfying assignment for taking the true branch *)
 Definition SAT_assign_prog_2_false_branch: concreteState := ( X !-> 1 ; Y !-> -2; _ !-> 0).
 
 (* Starting symbolic state for this example.*)
-Definition empty_st_2 := ( A !-> sA; B !-> sB; C !-> sC; J !-> sJ; Z !-> sZ2; Y !-> sY; X !-> sX; _ !-> (Constant 0)). 
+Definition empty_st_2 := ( A !-> sA; B !-> sB; C !-> sC; J !-> sJ; Z !-> sZ2; Y !-> sY; 
+  X !-> sX; _ !-> (Constant 0)). 
 
-(* The axiom is needed so that the same if statement can be evaluated with a different symbolic value for Y after it's
-decremented. *)
+(* The axiom is needed so that the same if statement can be evaluated with a different symbolic
+ value for Y after it's decremented. After the decrement, the symbolic expression changes
+ but the original statement in our program does not. The way we've implemented findStatement
+ requires an exact match.  *)
 Axiom cond_after_1_iteration :
 findStatement prog_2 2 =
 <{
@@ -589,7 +621,7 @@ then [<{ Z := Z * X }>;
      <{ Y := Y - J }>;
      <{ go_to S(S(O)) }>; Finish] else [Finish] end }>.
 
-(*This is the tree for the case that Y is 0, so the loop (made up of an if/then + go_to) only executes once.
+(*This is the tree for the case that the loop (made up of an if/then + go_to) only executes once.
 We prove that is a correct tree for the above prog_2. *)
 Example prog_2_eval :
   node_eval prog_2 (Node empty_st_2 none 0)
@@ -664,11 +696,13 @@ Theorem property_2_ex_2 : forall (pc :PathCond),
   rewrite <- H in H1. discriminate H1. simpl in H1. destruct H1.
 Qed.
 
-(* ======================  End of Proof of Property 2 for Program 2. ======================*)
+(* ======================  End:  Proof of Property 2 for Program 2. ======================*)
 
 
-(* ======================  Proof of Property 2 for Program 3. ======================*)
+(* ======================  Start: Proof of Property 2 for Program 3. ======================*)
 
+(* Figure 3 from the King paper did not give a specific program so we came up with our
+  own simpl while loop example. *)
 Definition prog_3 := [<{X := A}>;
                       <{while X >= 0 do
                         [<{X := X - (IntLit 1)}>; Go_To 1; Finish] end}>;
@@ -681,6 +715,7 @@ Definition SAT_assignment_3_1: concreteState := (X !-> 0; A !-> 0; _ !-> ( 0)).
 (* SAT assign for never looping *)
 Definition SAT_assignment_3_2: concreteState := (X !-> -1; A !-> -1; _ !-> ( 0)).
 
+(* This axiom is needed for the same reason as stated above.*)
 Axiom prog3_after_1_iteration :
 findStatement prog_3 1 =
 <{
@@ -688,30 +723,20 @@ while sX s- (Constant 1) >= 0
 do [<{ X := X - (IntLit 1) }>;
    Go_To 1; Finish] end }>.
 
-Print prog_2_eval.
-    
-
+ (* Now we provide the symbolic execution tree for this example in the case that the 
+  loop iterates at most once and prove it is correct. The `true` branch is the case that
+  the loop executes and the `false` branch is when it does not. *)
 Example prog_3_eval :
   node_eval prog_3 (Node empty_st_3 none 0)
-    (* X := A*)
-    (Tr (Node empty_st_3 none 0) [(
-      (* while x >=0 *)
+  (Tr (Node empty_st_3 none 0) [(
     Tr (Node (X !-> A ; empty_st_3) none 1) [(
-        (* X = X -1  *)
-    Tr (Node (X !-> A ; empty_st_3) 
-           (Pand <{X >= 0}> none) 2) [(
-          (* GoTo *)
-          Tr (Node (X !-> <{A s- Constant 1}> ; X !-> A; empty_st_3)
-             (Pand <{X >= 0}> none) 3) [(
-            (* While_unsat *)
+    Tr (Node (X !-> A ; empty_st_3) (Pand <{X >= 0}> none) 2) [(
+       Tr (Node (X !-> <{A s- Constant 1}> ; X !-> A; empty_st_3) (Pand <{X >= 0}> none) 3) [(
             Tr (Node (X !-> <{A s- Constant 1}> ; X !-> A; empty_st_3)
                (Pand <{X >= 0}> none) 1) [(
-                (* finish *)
                 Tr (Node (X !-> <{A s- Constant 1}> ; X !-> A; empty_st_3)
-               (      Pand <{ ~ sX s- (Constant 1) >= 0 }>
-        (Pand <{ X >= 0 }> none)) 5) nil
-)])])]);        
-        (* unsat/finish*)
+               (Pand <{ ~ sX s- (Constant 1) >= 0 }> (Pand <{ X >= 0 }> none)) 5) nil
+    )])])]);  
       Tr (Node (X !-> A ; empty_st_3)  (Pand  <{ ~X >= 0}> none) 5) nil 
     ])]).
 Proof. 
@@ -742,7 +767,7 @@ apply E_Finish with (st :=  X !-> <{A s- Constant 1}>; X !-> A; empty_st_3)(n :=
 (pc := Pand <{ ~ sX s- (Constant 1) >= 0 }>
         (Pand <{ X >= 0 }> none));
 try reflexivity. unfold SAT. exists SAT_assignment_3_1. simpl. reflexivity. 
-(* Done with `false` branch (loop never executes**)
+(* Done with `false` branch (loop never executes) **)
 apply E_Finish with (st :=  X !-> A; empty_st_3)(n :=  S( S (S ( S (S O)))))(pc := Pand <{ ~ sX >= 0 }> none);
 try reflexivity. unfold SAT. exists SAT_assignment_3_2. simpl. reflexivity.
 Qed.
@@ -762,12 +787,15 @@ Theorem property_3_ex_3 : forall (pc :PathCond),
   rewrite <- H in H1. discriminate H1. simpl in H1. destruct H1.
 Qed.
 
-(* ======================  End of Proof of Property 2 for Program 3. ======================*)
+(* ======================  End:  Proof of Property 2 for Program 3. ======================*)
 
-(* ========================== Definiton of Conventional Execution  ==============================================*)
+(* ========================== Definiton of Conventional Execution  =============================*)
 
-(* This section will define a conventional (concrete) execution in order for us to then prove the commutativity
- of the symbolic execution of our examples. *)
+(* This section will define a conventional (concrete) execution in order for us to then prove the 
+ commutativity of the symbolic execution of our examples. Almost all of the functions, types
+ and relations defined in this section are analagous to the ones in the symbolic section 
+ except that they operate over concreteStates only. *)
+
 Inductive ConcreteTreeNode : Type :=
   | ConcreteNode (s : concreteState) (pc : PathCond) (index : nat).
 
@@ -907,6 +935,7 @@ Proof.
     unfold SAT. exists final_state_1. simpl. reflexivity.
 Qed.
 
+(* Conventional execution tree for example 1. Proved correct above. *)
 Definition prog_1_conventional_tree :=   node_eval_conventional prog_1 (ConcreteNode start_state_1 none 0)
     (ConcreteTr (ConcreteNode start_state_1 none 0) [(
       ConcreteTr (ConcreteNode (X !-> start_state_1 A + start_state_1 B; start_state_1) none 1) [(
@@ -915,6 +944,7 @@ Definition prog_1_conventional_tree :=   node_eval_conventional prog_1 (Concrete
                     X !-> start_state_1 A + start_state_1 B; start_state_1) none 3) nil
     )])])]).
 
+(* Final concrete node (i.e. leaf) in example 1's conventional tree. *)
 Definition final_concrete_node_ex_1 := ConcreteNode (Z !-> intermediate_state_1 X + intermediate_state_1 Y  - start_state_1 B; Y !-> start_state_1 B + start_state_1 C;
                     X !-> start_state_1 A + start_state_1 B; start_state_1) none 3.
 
@@ -934,14 +964,17 @@ Theorem eval_1_commutative :
 Proof.
 simpl. reflexivity. Qed.
 
-(* ========================== End of Proof of Property 3 for Program 1 ==============================================*)
+(* ========================== End: Proof of Property 3 for Program 1 ==============================================*)
 
-(* ========================== Start of Proof of Property 3 for Program 2 ==============================================*)
+(* ========================== Start: Proof of Property 3 for Program 2 ==============================================*)
 
 Definition start_state_2: concreteState := ( X !-> 1; Y !-> 0; _ !-> ( 0)).
 Definition final_state_2_true_branch: concreteState := (J !-> 1 ; Z !-> 1 ; X !-> 1; Y !-> 0; _ !-> ( 0)).
 Definition start_state_2_false_branch: concreteState := (X !-> 1; Y !-> -2; _ !-> (0)).
 
+(* As done in the previous example, we provide a proof that this conventional 
+ execution tree is correct for this example so we can use information in its leaf nodes
+ to prove commutatitivy. *)
 Example prog_2_eval_conventional :
   node_eval_conventional prog_2 (ConcreteNode start_state_2 none 0)
     (ConcreteTr (ConcreteNode start_state_2 none 0) [(
@@ -984,8 +1017,7 @@ Proof.
      apply E_GoToConcrete with (i := S(S(O))) (st := Y !-> final_state_2_true_branch Y - final_state_2_true_branch J ;Z !-> final_state_2_true_branch Z * final_state_2_true_branch X; J !-> 1 ; Z !-> 1 ; start_state_2) 
     (n := S(S(S(S(S O))))) (pc := Pand <{ sY >= 0 }> none); try reflexivity.
     unfold SAT. exists final_state_2_true_branch. simpl. reflexivity.
-      (* If Y >= 0. This is not true anymore. Have to use the above axiom for this case since
-      now Y has been updated to be the symbol sY - sJ, but the condition is only checking sY >=0.  *)
+      (* If Y >= 0. No longer true  *)
     apply E_IfUnSATConcrete with (be := Bge0 (SymSub sY sJ)) (then_body := [<{Z := Z * X }>;
                                 <{Y := Y - J}>;
                                   Go_To 2; Finish]) (else_body := [Finish])(st := Y !-> final_state_2_true_branch Y - final_state_2_true_branch J ;
@@ -1005,7 +1037,7 @@ Qed.
 
 (* We prove that each of the two paths through this program are commutative.*)
 
-(* === Start of Proof of Property 3 for Prog 2 Path 1 (True Branch) === *)
+(* === Start:  Proof of Property 3 for Prog 2 Path 1 (True Branch) === *)
 Definition final_concrete_node_ex_2_true_branch :=
     ConcreteNode (Y !-> final_state_2_true_branch Y - final_state_2_true_branch J ;
    Z !-> final_state_2_true_branch Z * final_state_2_true_branch X;J !-> 1 ; Z !-> 1 ; start_state_2) (Pand <{ ~ sY s- sJ >= 0 }>
@@ -1024,6 +1056,7 @@ Definition final_symbolic_node_state_sub :=
   ( Y !-> substitute <{sY s- sJ}> SAT_assign_prog_2_true_branch;
   Z !-> substitute <{sZ2 s* sX}> SAT_assign_prog_2_true_branch ;J !-> 1 ; Z !-> 1; start_state_2).
 
+(* Function used to show equivalence of two states for example 2.*)
 Definition ex_2_states_equivalent (s1 s2 : concreteState) : bool :=
   if  Z.eqb (s1 X) (s2 X) then 
   if Z.eqb (s1 Y) (s2 Y) then 
@@ -1046,9 +1079,9 @@ split.
 - simpl. reflexivity.
 - simpl. reflexivity. Qed.
 
-(* === End of Proof of Property 3 for Prog 2 Path 1 (True Branch) === *)
+(* === End: Proof of Property 3 for Prog 2 Path 1 (True Branch) === *)
 
-(* === Start of Proof of Property 3 for Prog 2 Path 2 (False Branch) === *)
+(* === Start: Proof of Property 3 for Prog 2 Path 2 (False Branch) === *)
 
 Definition final_concrete_node_state_false :=
 (J !-> 1 ; Z !-> 1 ; start_state_2_false_branch). 
@@ -1057,7 +1090,7 @@ Definition final_symbolic_node_state_false :=
 (J !-> substitute(Constant 1) SAT_assign_prog_2_false_branch; Z !-> substitute (Constant 1) SAT_assign_prog_2_true_branch ; start_state_2_false_branch).
 
 (* -The inital state concrete state for conventional execution and the SAT assignment for 
-    the symbolic exeuction of the true branch are the same.
+    the symbolic exeuction of the false branch are the same.
   - The final state of the concrete execution tree is the same as the final state of the 
     the symbolic execution of the same example.  *)   
 Theorem eval_2_commutative_false_branch : 
@@ -1070,11 +1103,11 @@ Proof.
  split.
  - simpl. reflexivity. 
  - simpl. reflexivity. Qed.
-(* === End of Proof of Property 3 for Prog 2 Path 2 (False Branch) === *)
+(* === End: Proof of Property 3 for Prog 2 Path 2 (False Branch) === *)
 
-(* ========================== End of Proof of Property 3 for Program 2 ==============================================*)
+(* ========================== End: Proof of Property 3 for Program 2 ==============================================*)
 
-(* ========================== Start of Proof of Property 3 for Program 3 ==============================================*)
+(* ========================== Start: Proof of Property 3 for Program 3 ==============================================*)
 
 (* start state for iterating once and stopping *)
 Definition start_state_3_1: concreteState := ( A !-> 0; _ !-> ( 0)).
@@ -1084,6 +1117,8 @@ Definition end_state_3_1 := ( X !-> -1; A !-> 0; _ !-> ( 0)).
 Definition start_state_3_2: concreteState := ( X !-> -1; A !-> -1; _ !-> ( 0)).
 Definition end_state_3_2 : concreteState := ( X !-> -1 ; A !-> -1; _ !-> ( 0)).
 
+(* Proof that this conventional execution tree is correct for this example so we can use 
+information in its leaf nodes to prove commutatitivy. *)
 Example prog_3_eval_conventional :
   node_eval_conventional prog_3 (ConcreteNode start_state_3_1 none 0)
     (* X := A*)
@@ -1141,9 +1176,11 @@ apply E_FinishConcrete with (st := X !-> 0 ; start_state_3_1)(n :=  S( S (S ( S 
 try reflexivity. unfold SAT. exists end_state_3_2. simpl. reflexivity.
 Qed.
 
-(* We prove that each of the two paths through this program are commutative.*)
+(* We prove that each of the two paths through this program are commutative.
+ Reminder: we call the case that the loop executes the `True branch` and the case
+ that the loop never executes the `False branch`*)
 
-(* === Start of Proof of Property 3 for Prog 2 Path 1 (True Branch) === *)
+(* === Start: Proof of Property 3 for Prog 2 Path 1 (True Branch) === *)
 Definition final_concrete_node_ex_3_true_branch :=
     (ConcreteNode (X !-> start_state_3_1 X - 1 ; X !-> start_state_3_1 A; start_state_3_1)
                (      Pand <{ ~ sX s- (Constant 1) >= 0 }>
@@ -1159,6 +1196,7 @@ Definition final_symbolic_node_ex_3_true_branch :=
 Definition final_symbolic_node_3_state_sub :=
  (X !-> substitute <{A s- Constant 1}> SAT_assignment_3_1 ; X !-> substitute A SAT_assignment_3_1; _ !-> 0).
 
+(* Function used to show equivalence of two states for example 1.*)
 Definition ex_3_states_equivalent (s1 s2 : concreteState) : bool :=
   if  Z.eqb (s1 X) (s2 X) then 
   if Z.eqb (s1 A) (s2 A) then 
@@ -1179,7 +1217,7 @@ split.
 - simpl. reflexivity.
 - simpl. reflexivity. Qed.
 
-(* === End of Proof of Property 3 for Prog 3 Path 1 (True Branch) === *)
+(* === End: Proof of Property 3 for Prog 3 Path 1 (True Branch) === *)
 
 (* === Start of Proof of Property 3 for Prog 3 Path 2 (False Branch) === *)
  
@@ -1201,3 +1239,4 @@ Proof.
  split.
  - simpl. reflexivity. 
  - simpl. reflexivity. Qed.
+(* ========================== End: Proof of Property 3 for Program 3 ==============================================*)
