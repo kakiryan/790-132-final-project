@@ -667,7 +667,7 @@ Qed.
 (* ======================  End of Proof of Property 2 for Program 2. ======================*)
 
 
-(** Example 3 *)
+(* ======================  Proof of Property 2 for Program 3. ======================*)
 
 Definition prog_3 := [<{X := A}>;
                       <{while X >= 0 do
@@ -746,6 +746,23 @@ try reflexivity. unfold SAT. exists SAT_assignment_3_1. simpl. reflexivity.
 apply E_Finish with (st :=  X !-> A; empty_st_3)(n :=  S( S (S ( S (S O)))))(pc := Pand <{ ~ sX >= 0 }> none);
 try reflexivity. unfold SAT. exists SAT_assignment_3_2. simpl. reflexivity.
 Qed.
+
+(* This symbolic execution tree ends with two leaves.*)
+Definition prog_3_leaves := [(Pand <{ ~ sX s- (Constant 1) >= 0 }>
+        (Pand <{ X >= 0 }> none));
+Pand <{ ~ sX >= 0 }> none].
+
+(* This proves that the first leaf node does not appear later in the  list of
+leaves. This is sufficient for this case where we just have two leaves, but the idea of the proof
+would be the same for more leaves, just having to repeat for the subsequent sublists of leaves.*)
+Theorem property_3_ex_3 : forall (pc :PathCond), 
+(get_head_pc prog_3_leaves) = pc -> ~ (In pc (tl prog_3_leaves)).
+ Proof.
+ intros. unfold not. unfold prog_3_leaves. intros. inversion H0. simpl in H. 
+  rewrite <- H in H1. discriminate H1. simpl in H1. destruct H1.
+Qed.
+
+(* ======================  End of Proof of Property 2 for Program 3. ======================*)
 
 (* ========================== Definiton of Conventional Execution  ==============================================*)
 
@@ -833,7 +850,7 @@ Inductive node_eval_conventional : Program -> ConcreteTreeNode -> ConcreteExecut
     (findStatement prog n) = <{while be do body end}> ->
     (SAT pc) ->
     node_eval_conventional prog (ConcreteNode st (Pand be pc) (n + 1)) tree1' ->
-    node_eval_conventional prog (ConcreteNode st (Pand (Bnot be) pc) (n + (length body))) tree1' ->
+    node_eval_conventional prog (ConcreteNode st (Pand (Bnot be) pc) (n + (length body) + 1)) tree2' ->
     node_eval_conventional prog node (ConcreteTr node [tree1' ; tree2'])
 
   | E_WhileUnSATConcrete: forall prog node be body st n pc tree,
@@ -842,7 +859,7 @@ Inductive node_eval_conventional : Program -> ConcreteTreeNode -> ConcreteExecut
     extractConventionalPathCond node = pc ->
     (findStatement prog n) = <{while be do body end}> ->
     (SAT (Pand (Bnot be) pc)) ->
-    node_eval_conventional prog (ConcreteNode st (Pand (Bnot be) pc) (n + (length body))) tree ->
+    node_eval_conventional prog (ConcreteNode st (Pand (Bnot be) pc) (n + (length body) + 1)) tree ->
     node_eval_conventional prog node (ConcreteTr node [tree])
 
   | E_FinishConcrete: forall prog node st n pc,
@@ -1057,3 +1074,130 @@ Proof.
 
 (* ========================== End of Proof of Property 3 for Program 2 ==============================================*)
 
+(* ========================== Start of Proof of Property 3 for Program 3 ==============================================*)
+
+(* start state for iterating once and stopping *)
+Definition start_state_3_1: concreteState := ( A !-> 0; _ !-> ( 0)).
+Definition end_state_3_1 := ( X !-> -1; A !-> 0; _ !-> ( 0)).
+
+(* start state for never looping *)
+Definition start_state_3_2: concreteState := ( X !-> -1; A !-> -1; _ !-> ( 0)).
+Definition end_state_3_2 : concreteState := ( X !-> -1 ; A !-> -1; _ !-> ( 0)).
+
+Example prog_3_eval_conventional :
+  node_eval_conventional prog_3 (ConcreteNode start_state_3_1 none 0)
+    (* X := A*)
+    (ConcreteTr (ConcreteNode start_state_3_1 none 0) [(
+      (* while x >=0 *)
+    ConcreteTr (ConcreteNode (X !-> start_state_3_1 A ; start_state_3_1) none 1) [(
+        (* X = X -1  *)
+    ConcreteTr (ConcreteNode (X !-> start_state_3_1 A ; start_state_3_1) 
+           (Pand <{X >= 0}> none) 2) [(
+          (* GoTo *)
+          ConcreteTr (ConcreteNode (X !-> start_state_3_1 X - 1 ; X !-> start_state_3_1 A; start_state_3_1)
+             (Pand <{X >= 0}> none) 3) [(
+            (* While_unsat *)
+            ConcreteTr (ConcreteNode (X !-> start_state_3_1 X - 1 ; X !-> start_state_3_1 A; start_state_3_1)
+               (Pand <{X >= 0}> none) 1) [(
+                (* finish *)
+                ConcreteTr (ConcreteNode (X !-> start_state_3_1 X - 1 ; X !-> start_state_3_1 A; start_state_3_1)
+               (      Pand <{ ~ sX s- (Constant 1) >= 0 }>
+        (Pand <{ X >= 0 }> none)) 5) nil
+)])])]);        
+        (* unsat/finish*)
+      ConcreteTr (ConcreteNode (X !-> start_state_3_1 A ; start_state_3_1)  (Pand  <{ ~X >= 0}> none) 5) nil 
+    ])]).
+Proof. 
+(* X := A *)
+apply E_AssignConcrete with (x := X) (ie := <{IntId A}>) 
+                      (st := start_state_3_1) (n := O) (pc := none); try reflexivity.
+unfold SAT. exists start_state_3_1. reflexivity.
+(* While X >= 0 *)
+apply E_WhileSATConcrete with (be := Bge0 sX) (body := [<{X := X - (IntLit 1)}>; Go_To 1; Finish])
+    (st := X !-> 0;  start_state_3_1) (n := S O) (pc := none);
+  try reflexivity.
+unfold SAT. exists start_state_3_1. reflexivity.
+(* X := X - 1 *)
+apply E_AssignConcrete with (x := X) (ie := <{X - IntLit 1}>) 
+                      (st :=  X !-> 0; start_state_3_1) (n := S ( S O)) (pc := Pand <{X >= 0}> none); 
+try reflexivity.
+unfold SAT. exists start_state_3_1. simpl. reflexivity. 
+(* GoTo Top of While **)
+apply E_GoToConcrete with (i := S(O)) ( st :=  X !-> start_state_3_1 X - 1; X !-> 0; start_state_3_1)(n :=  S ( S (S O)))(pc := Pand <{X >= 0}> none); 
+try reflexivity.
+unfold SAT. exists start_state_3_1. simpl. reflexivity. 
+(* While X >=0 (this time its not) **)
+apply E_WhileUnSATConcrete with (body := [<{X := X - (IntLit 1)}>; Go_To 1; Finish]) (be := Bge0 (SymSub sX (Constant 1))) 
+(st :=  X !-> start_state_3_1 X - 1; X !-> 0; start_state_3_1)(n :=  S O)(pc := Pand <{X >= 0}> none);
+try reflexivity. apply prog3_after_1_iteration.
+unfold SAT. exists start_state_3_1. simpl. reflexivity. 
+(* Done with `true` branch **)
+apply E_FinishConcrete with (st :=  X !-> start_state_3_1 X - 1; X !-> 0; start_state_3_1)(n :=  S( S ( S (S(S O)))))
+(pc := Pand <{ ~ sX s- (Constant 1) >= 0 }>
+        (Pand <{ X >= 0 }> none));
+try reflexivity. unfold SAT. exists start_state_3_1. simpl. reflexivity. 
+(* Done with `false` branch (loop never executes**)
+apply E_FinishConcrete with (st := X !-> 0 ; start_state_3_1)(n :=  S( S (S ( S (S O)))))(pc := Pand <{ ~ sX >= 0 }> none);
+try reflexivity. unfold SAT. exists end_state_3_2. simpl. reflexivity.
+Qed.
+
+(* We prove that each of the two paths through this program are commutative.*)
+
+(* === Start of Proof of Property 3 for Prog 2 Path 1 (True Branch) === *)
+Definition final_concrete_node_ex_3_true_branch :=
+    (ConcreteNode (X !-> start_state_3_1 X - 1 ; X !-> start_state_3_1 A; start_state_3_1)
+               (      Pand <{ ~ sX s- (Constant 1) >= 0 }>
+        (Pand <{ X >= 0 }> none)) 5).
+
+
+Definition final_symbolic_node_ex_3_true_branch := 
+  (Node (X !-> <{A s- Constant 1}> ; X !-> A; empty_st_3)
+               (      Pand <{ ~ sX s- (Constant 1) >= 0 }>
+        (Pand <{ X >= 0 }> none)) 5).
+
+(* Concreteize the state of the last symbolic node on the true branch. *)
+Definition final_symbolic_node_3_state_sub :=
+ (X !-> substitute <{A s- Constant 1}> SAT_assignment_3_1 ; X !-> substitute A SAT_assignment_3_1; _ !-> 0).
+
+Definition ex_3_states_equivalent (s1 s2 : concreteState) : bool :=
+  if  Z.eqb (s1 X) (s2 X) then 
+  if Z.eqb (s1 A) (s2 A) then 
+   true else false else false.
+
+(* -The inital state concrete state for conventional execution and the SAT assignment for 
+    the symbolic exeuction of the true branch are the same.
+  - The final state of the concrete execution tree is the same as the final state of the 
+    the symbolic execution of the same example.*)                     
+Theorem eval_3_commutative_true_branch : 
+  ex_3_states_equivalent 
+     start_state_3_1
+    SAT_assignment_3_1 = true /\
+ ex_3_states_equivalent 
+  end_state_3_1 final_symbolic_node_3_state_sub = true.
+Proof.
+split.
+- simpl. reflexivity.
+- simpl. reflexivity. Qed.
+
+(* === End of Proof of Property 3 for Prog 3 Path 1 (True Branch) === *)
+
+(* === Start of Proof of Property 3 for Prog 3 Path 2 (False Branch) === *)
+ 
+
+Definition final_symbolic_node_state_false_3 := 
+(X !-> substitute A SAT_assignment_3_2; _ !-> 0).
+
+(* -The inital state concrete state for conventional execution and the SAT assignment for 
+    the symbolic exeuction of the false branch are the same.
+  - The final state of the concrete execution tree is the same as the final state of the 
+    the symbolic execution of the same example.  *)   
+Theorem eval_3_commutative_false_branch : 
+  ex_3_states_equivalent 
+     start_state_3_2
+    SAT_assignment_3_2 = true /\
+ ex_2_states_equivalent 
+  end_state_3_2 final_symbolic_node_state_false_3 = true.
+Proof.
+ split.
+ - simpl. reflexivity. 
+ - simpl. reflexivity. Qed.
