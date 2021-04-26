@@ -666,6 +666,45 @@ Qed.
 
 (* ======================  End of Proof of Property 2 for Program 2. ======================*)
 
+
+(** Example 3 *)
+
+Definition prog_3 := [<{X := A}>;
+                      <{while X >= 0 do
+                        [<{X := X - (IntLit 1)}>; Finish] end}>;
+                      Finish].
+
+Definition empty_st_3 := t_update empty_st A (Constant 0).
+
+Example prog_3_eval :
+  node_eval prog_3 (Node empty_st_3 none 0)
+    (* Initial, empty execution state *)
+    (Tr (Node empty_st_3 none 0) [
+      (* After instruction 0 : update state mapping *)
+      Tr (Node (X !-> (Constant 0) ; empty_st_3) none 1) [
+        (* After instruction 1, first branch:
+           add boolean expression to PC and go into loop body *)
+        Tr (Node (X !-> (Constant 0) ; empty_st_3) 
+           (Pand <{X >= 0}> none) 2) [
+          (* Then execute loop body by updating the value of X *)
+          Tr (Node (X !-> (Constant (Z.opp 1)) ; empty_st_3)
+             (Pand <{X >= 0}> none) 3) [
+            (* Then Finish (execution stops??) *)
+            Tr (Node (X !-> (Constant (Z.opp 1)) ; empty_st_3)
+               (Pand <{X >= 0}> none) 4) []
+          ]
+        ];
+        (* After instruction 1, second branch:
+           add negation of boolean expression to PC and skip loop *)
+        Tr (Node (X !-> (Constant 0) ; empty_st_3)
+           (Pand (Bnot <{X >= 0}>) none) 4) [
+          (* Nothing comes after the loop, so halt execution *)
+          Tr (Node (X !-> (Constant 0) ; empty_st_3)
+             (Pand (Bnot <{X >= 0}>) none) 4) []
+        ]
+      ]
+    ]).
+Proof. Abort.
   
 (* ========================== Definiton of Conventional Execution  ==============================================*)
 
