@@ -6,6 +6,9 @@ From LF Require Import Maps.
 From Coq Require Import Lists.List.
 Import ListNotations.
 
+(** Link to our repo: 
+https://github.com/kakiryan/790-132-final-project *)
+
 (** Table of Contents:
   - Definition Symbolic Execution Concepts (Minimum goal)
   - General Proof of Property 1 (Standard Goal)
