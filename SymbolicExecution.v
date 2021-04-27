@@ -635,176 +635,215 @@ findStatement prog_2 2 =
     executes once. We prove that is a correct tree for the above prog_2. *)
 Example prog_2_eval :
   node_eval prog_2 (Node empty_st_2 none 0)
-    (Tr (Node empty_st_2 none 0) [(
-      Tr (Node (Z !-> (Constant 1) ; empty_st_2) none 1) [(
-        Tr (Node (J !-> (Constant 1) ; Z !-> (Constant 1) ; empty_st_2) none 2) [(
-        Tr (Node (J !-> (Constant 1) ; Z !-> (Constant 1) ; empty_st_2) (Pand (Bge0 Y) none) 3) [(
-        Tr (Node (Z !-> <{sZ2 s* sX}>; J !-> (Constant 1) ; Z !-> (Constant 1) ; empty_st_2) (Pand (Bge0 Y) none) 4) [(
-        Tr (Node (Y !-> <{sY s- sJ}>; Z !-> <{sZ2 s* sX}>; J !-> (Constant 1) ; Z !-> (Constant 1) ; empty_st_2) (Pand (Bge0 Y) none) 5) [(
-        Tr (Node (Y !-> <{sY s- sJ}>; Z !-> <{sZ2 s* sX}>; J !-> (Constant 1) ; Z !-> (Constant 1) ; empty_st_2) (Pand (Bge0 Y) none) 2) [
-            Tr (Node (Y !-> <{sY s- sJ}>; Z !-> <{sZ2 s* sX}>;J !-> (Constant 1) ; Z !-> (Constant 1) ; empty_st_2) (Pand <{ ~ sY s- sJ >= 0 }>
-       (Pand <{ sY >= 0 }> none)) 6) nil]
-    )])])]);
-        Tr (Node (J !-> (Constant 1) ; Z !-> (Constant 1) ; empty_st_2) (Pand (Bnot (Bge0 Y)) none) 6) nil
-])])]).
+    (Tr (Node empty_st_2 none 0) [
+      Tr (Node (Z !-> (Constant 1) ; empty_st_2) none 1) [
+        Tr (Node (J !-> (Constant 1) ; Z !-> (Constant 1) ; empty_st_2) none 2) [
+          Tr (Node (J !-> (Constant 1) ; Z !-> (Constant 1) ; empty_st_2)
+              (Pand (Bge0 Y) none) 3) [
+            Tr (Node (Z !-> <{sZ2 s* sX}>; J !-> (Constant 1) ; Z !-> (Constant 1) ;
+                empty_st_2) (Pand (Bge0 Y) none) 4) [
+              Tr (Node (Y !-> <{sY s- sJ}>; Z !-> <{sZ2 s* sX}>; J !-> (Constant 1) ;
+                  Z !-> (Constant 1) ; empty_st_2) (Pand (Bge0 Y) none) 5) [
+                Tr (Node (Y !-> <{sY s- sJ}>; Z !-> <{sZ2 s* sX}>; J !-> (Constant 1) ;
+                   Z !-> (Constant 1) ; empty_st_2) (Pand (Bge0 Y) none) 2) [
+                  Tr (Node (Y !-> <{sY s- sJ}>; Z !-> <{sZ2 s* sX}>;J !-> (Constant 1) ;
+                      Z !-> (Constant 1) ; empty_st_2) (Pand <{ ~ sY s- sJ >= 0 }>
+                     (Pand <{ sY >= 0 }> none)) 6) nil
+          ]]]];
+          Tr (Node (J !-> (Constant 1) ; Z !-> (Constant 1) ; empty_st_2)
+             (Pand (Bnot  (Bge0 Y)) none) 6) nil
+    ]]]).
 Proof.
-    (* Z := 1 *)
-    apply E_Assign with (x := Z) (ie := <{IntLit 1}>) (se := <{Constant 1}>)
-                      (st := empty_st_2) (n := O) (pc := none); try reflexivity.
-    unfold SAT. exists SAT_assign_prog_2_true_branch. simpl. reflexivity.
-    (* J := 1 *)
-    apply E_Assign with (x := J) (ie := <{IntLit 1}>) (se := <{Constant 1}>)
-                      (st := Z !-> (Constant 1) ; empty_st_2) (n := S O) (pc := none); try reflexivity.
-    unfold SAT. exists SAT_assign_prog_2_true_branch. simpl. reflexivity. 
-    (* if Y >= 0. This is true for the first iteration. *)
-    apply E_IfSAT with (be := Bge0 sY) (then_body := [<{Z := Z * X }>;
-                              <{Y := Y - J}>;
-                                Go_To 2;
-                                Finish]) (else_body := [Finish])
-    (st := J !-> (Constant 1); Z !-> (Constant 1) ; empty_st_2) (n := S(S O)) (pc := none);
-    try reflexivity. unfold SAT. exists SAT_assign_prog_2_true_branch. simpl. reflexivity.
-    (* Z := Z * X  *)
-    apply E_Assign with (x := Z) (ie := <{Z * X}>) (se := <{sZ2 s* sX}>)
-    (st := J !-> (Constant 1); Z !-> (Constant 1) ; empty_st_2) (n := S(S(S O))) (pc := Pand <{ sY >= 0 }> none); try reflexivity.
-    unfold SAT. exists SAT_assign_prog_2_true_branch. simpl. reflexivity. 
-     (* Y := Y - J  *)
-    apply E_Assign with (x := Y) (ie := <{Y - J}>) (se := <{sY s- sJ}>)
-    (st := Z !-> <{sZ2 s* sX}>; J !-> (Constant 1); Z !-> (Constant 1) ; empty_st_2) (n := S(S(S(S O)))) (pc := Pand <{ sY >= 0 }> none); try reflexivity.
-    unfold SAT. exists SAT_assign_prog_2_true_branch. simpl. reflexivity.
-      (* Go_To 2. Jump back up to if statement *)
-     apply E_GoTo with (i := S(S(O))) (st := Y !-> <{sY s- sJ}>; Z !-> <{sZ2 s* sX}>; J !-> (Constant 1); Z !-> (Constant 1) ; empty_st_2) 
-    (n := S(S(S(S(S O))))) (pc := Pand <{ sY >= 0 }> none); try reflexivity.
-    unfold SAT. exists SAT_assign_prog_2_true_branch. simpl. reflexivity.
-      (* If Y >= 0. This is not true anymore. Have to use the above axiom for this case since
-      now Y has been updated to be the symbol sY - sJ, but the condition is only checking sY >=0.  *)
-    apply E_IfUnSAT with (be := Bge0 (SymSub sY sJ)) (then_body := [<{Z := Z * X }>;
-                                <{Y := Y - J}>;
-                                  Go_To 2; Finish]) (else_body := [Finish])(st := Y !-> <{sY s- sJ}>; Z !-> <{sZ2 s* sX}>; J !-> (Constant 1); Z !-> (Constant 1) ; empty_st_2) 
-    (n := S(S O)) (pc := Pand <{ sY >= 0 }> none); try reflexivity. 
-     apply cond_after_1_iteration. exists SAT_assign_prog_2_true_branch. simpl. reflexivity.
-    (* Finish. This is the end of the road for the original true branch. *)  
-    apply E_Finish with (st := Y !-> <{sY s- sJ}>; Z !-> <{sZ2 s* sX}>; J !-> (Constant 1); Z !-> (Constant 1) ; empty_st_2) 
-    (n := S(S(S (S(S(S O)))))) (pc := (Pand <{ ~ sY s- sJ >= 0 }> (Pand <{ sY >= 0 }> none))); try reflexivity.
-   exists SAT_assign_prog_2_true_branch. simpl. reflexivity.
-    (* Finish. This is the end of the road for the original else branch. *)  
-    apply E_Finish with (st := J !-> (Constant 1); Z !-> (Constant 1) ; empty_st_2) 
-    (n := S(S(S (S(S(S O)))))) (pc := (Pand <{ ~ Y >= 0 }> none)); try reflexivity.
-   exists SAT_assign_prog_2_false_branch. simpl. reflexivity.
+  (* Z := 1 *)
+  apply E_Assign with (x := Z) (ie := <{IntLit 1}>) (se := <{Constant 1}>)
+                      (st := empty_st_2) (n := O) (pc := none);
+  try reflexivity.
+  unfold SAT. exists SAT_assign_prog_2_true_branch. simpl. reflexivity.
+  (* J := 1 *)
+  apply E_Assign with (x := J) (ie := <{IntLit 1}>) (se := <{Constant 1}>)
+                      (st := Z !-> (Constant 1) ; empty_st_2) (n := S O) (pc := none);
+  try reflexivity.
+  unfold SAT. exists SAT_assign_prog_2_true_branch. simpl. reflexivity. 
+  (* if Y >= 0. This is true for the first iteration. *)
+  apply E_IfSAT with (be := Bge0 sY) (then_body := [<{Z := Z * X }>;
+                                                    <{Y := Y - J}>;
+                                                    Go_To 2;
+                                                    Finish])
+                      (else_body := [Finish])
+                      (st := J !-> (Constant 1); Z !-> (Constant 1) ; empty_st_2)
+                      (n := S (S O)) (pc := none);
+  try reflexivity.
+  unfold SAT. exists SAT_assign_prog_2_true_branch. simpl. reflexivity.
+  (* Z := Z * X  *)
+  apply E_Assign with (x := Z) (ie := <{Z * X}>) (se := <{sZ2 s* sX}>)
+                      (st := J !-> (Constant 1); Z !-> (Constant 1) ; empty_st_2)
+                      (n := S (S (S O))) (pc := Pand <{ sY >= 0 }> none);
+  try reflexivity.
+  unfold SAT. exists SAT_assign_prog_2_true_branch. simpl. reflexivity. 
+  (* Y := Y - J  *)
+  apply E_Assign with (x := Y) (ie := <{Y - J}>) (se := <{sY s- sJ}>)
+                      (st := Z !-> <{sZ2 s* sX}>; J !-> (Constant 1);
+                      Z !-> (Constant 1) ; empty_st_2) (n := S (S (S (S O))))
+                      (pc := Pand <{ sY >= 0 }> none);
+  try reflexivity.
+  unfold SAT. exists SAT_assign_prog_2_true_branch. simpl. reflexivity.
+  (* Go_To 2. Jump back up to if statement *)
+  apply E_GoTo with (i := S (S O)) (st := Y !-> <{sY s- sJ}>; Z !-> <{sZ2 s* sX}>; 
+                    J !-> (Constant 1); Z !-> (Constant 1) ; empty_st_2) 
+                    (n := S (S (S (S (S O))))) (pc := Pand <{ sY >= 0 }> none);
+  try reflexivity.
+  unfold SAT. exists SAT_assign_prog_2_true_branch. simpl. reflexivity.
+  (* If Y >= 0. This is not true anymore. Have to use the above axiom for this case,
+     since now Y has been updated to be the symbol sY - sJ, but the condition is only
+     checking sY >=0. *)
+  apply E_IfUnSAT with (be := Bge0 (SymSub sY sJ))
+                       (then_body := [<{Z := Z * X }>;
+                                      <{Y := Y - J}>;
+                                      Go_To 2;
+                                      Finish])
+                        (else_body := [Finish]) (st := Y !-> <{sY s- sJ}>;
+                        Z !-> <{sZ2 s* sX}>; J !-> (Constant 1);
+                        Z !-> (Constant 1) ; empty_st_2) 
+  (n := S(S O)) (pc := Pand <{ sY >= 0 }> none);
+  try reflexivity. 
+  apply cond_after_1_iteration. exists SAT_assign_prog_2_true_branch. simpl. reflexivity.
+  (* Finish. This is the end of the road for the original true branch. *)  
+  apply E_Finish with (st := Y !-> <{sY s- sJ}>; Z !-> <{sZ2 s* sX}>;
+                      J !-> (Constant 1); Z !-> (Constant 1) ; empty_st_2) 
+                      (n := 6%nat)
+                      (pc := (Pand <{ ~ sY s- sJ >= 0 }> (Pand <{ sY >= 0 }> none))); 
+  try reflexivity.
+  exists SAT_assign_prog_2_true_branch. simpl. reflexivity.
+  (* Finish. This is the end of the road for the original else branch. *)  
+  apply E_Finish with (st := J !-> (Constant 1); Z !-> (Constant 1) ; empty_st_2) 
+                      (n := 6%nat) (pc := (Pand <{ ~ Y >= 0 }> none));
+  try reflexivity.
+  exists SAT_assign_prog_2_false_branch. simpl. reflexivity.
 Qed.
 
-(* This symbolic execution tree ends with two leaves.*)
-Definition prog_2_leaves := [(Pand <{ ~ sY s- sJ >= 0 }> (Pand <{ sY >= 0 }> none));
-(Pand (Bnot (Bge0 Y)) none)].
+(** This symbolic execution tree ends with two leaves. *)
+Definition prog_2_leaves :=
+  [ Pand <{ ~ sY s- sJ >= 0 }> (Pand <{ sY >= 0 }> none) ; Pand (Bnot (Bge0 Y)) none ].
 
-(* This proves that the first leaf node does not appear later in the  list of
-leaves. This is sufficient for this case where we just have two leaves, but the idea of the proof
-would be the same for more leaves, just having to repeat for the subsequent sublists of leaves.*)
-Theorem property_2_ex_2 : forall (pc :PathCond), 
-(get_head_pc prog_2_leaves) = pc -> ~ (In pc (tl prog_2_leaves)).
- Proof.
- intros. unfold not. unfold prog_2_leaves. intros. inversion H0. simpl in H. 
+(** This proves that the first leaf node does not appear later in the  list of
+    leaves. This is sufficient for this case where we just have two leaves, but the
+    idea of the proof would be the same for more leaves, just having to repeat for
+    the subsequent sublists of leaves.*)
+Theorem property_2_ex_2 : forall (pc : PathCond), 
+  (get_head_pc prog_2_leaves) = pc -> ~ (In pc (tl prog_2_leaves)).
+Proof.
+  intros. unfold not. unfold prog_2_leaves. intros. inversion H0. simpl in H. 
   rewrite <- H in H1. discriminate H1. simpl in H1. destruct H1.
 Qed.
 
-(* ======================  End:  Proof of Property 2 for Program 2. ======================*)
+(* ===================  End:  Proof of Property 2 for Program 2. ==================== *)
 
 
-(* ======================  Start: Proof of Property 2 for Program 3. ======================*)
+(* ===================  Start: Proof of Property 2 for Program 3. =================== *)
 
-(* Figure 3 from the King paper did not give a specific program so we came up with our
-  own simpl while loop example. *)
+(** Figure 3 from the King paper did not give a specific program, so we came up with
+    our own simple while loop example. *)
 Definition prog_3 := [<{X := A}>;
                       <{while X >= 0 do
                         [<{X := X - (IntLit 1)}>; Go_To 1; Finish] end}>;
                       Finish].
 
-Definition empty_st_3 := ( A !-> sA; _ !-> (Constant 0)).
+Definition empty_st_3 := (A !-> sA; _ !-> (Constant 0)).
 
-(* SAT assign for iterating once and stopping *)
-Definition SAT_assignment_3_1: concreteState := (X !-> 0; A !-> 0; _ !-> ( 0)).
-(* SAT assign for never looping *)
-Definition SAT_assignment_3_2: concreteState := (X !-> -1; A !-> -1; _ !-> ( 0)).
+(** SAT assign for iterating once and stopping *)
+Definition SAT_assignment_3_1: concreteState := (X !-> 0; A !-> 0; _ !-> 0).
+(** SAT assign for never looping *)
+Definition SAT_assignment_3_2: concreteState := (X !-> -1; A !-> -1; _ !-> 0).
 
 (* This axiom is needed for the same reason as stated above.*)
 Axiom prog3_after_1_iteration :
-findStatement prog_3 1 =
-<{
-while sX s- (Constant 1) >= 0
-do [<{ X := X - (IntLit 1) }>;
-   Go_To 1; Finish] end }>.
+  findStatement prog_3 1 =
+  <{while sX s- (Constant 1) >= 0 do
+    [<{ X := X - (IntLit 1) }>; Go_To 1; Finish] end }>.
 
- (* Now we provide the symbolic execution tree for this example in the case that the 
-  loop iterates at most once and prove it is correct. The `true` branch is the case that
-  the loop executes and the `false` branch is when it does not. *)
+(** Now we provide the symbolic execution tree for this example in the case that the 
+    loop iterates at most once and prove it is correct. The 'true' branch is the
+    case that the loop executes and the `false` branch is when it does not. *)
 Example prog_3_eval :
   node_eval prog_3 (Node empty_st_3 none 0)
   (Tr (Node empty_st_3 none 0) [(
     Tr (Node (X !-> A ; empty_st_3) none 1) [(
     Tr (Node (X !-> A ; empty_st_3) (Pand <{X >= 0}> none) 2) [(
-       Tr (Node (X !-> <{A s- Constant 1}> ; X !-> A; empty_st_3) (Pand <{X >= 0}> none) 3) [(
-            Tr (Node (X !-> <{A s- Constant 1}> ; X !-> A; empty_st_3)
-               (Pand <{X >= 0}> none) 1) [(
-                Tr (Node (X !-> <{A s- Constant 1}> ; X !-> A; empty_st_3)
-               (Pand <{ ~ sX s- (Constant 1) >= 0 }> (Pand <{ X >= 0 }> none)) 5) nil
+      Tr (Node (X !-> <{A s- Constant 1}> ; X !-> A; empty_st_3)
+        (Pand <{X >= 0}> none) 3) [(
+        Tr (Node (X !-> <{A s- Constant 1}> ; X !-> A; empty_st_3)
+           (Pand <{X >= 0}> none) 1) [(
+          Tr (Node (X !-> <{A s- Constant 1}> ; X !-> A; empty_st_3)
+             (Pand <{ ~ sX s- (Constant 1) >= 0 }> (Pand <{ X >= 0 }> none)) 5) nil
     )])])]);  
       Tr (Node (X !-> A ; empty_st_3)  (Pand  <{ ~X >= 0}> none) 5) nil 
-    ])]).
+  ])]).
 Proof. 
-(* X := A *)
-apply E_Assign with (x := X) (ie := <{IntId A}>) (se := sA)
+  (* X := A *)
+  apply E_Assign with (x := X) (ie := <{IntId A}>) (se := sA)
                       (st := empty_st_3) (n := O) (pc := none); try reflexivity.
-unfold SAT. exists SAT_assignment_3_1. reflexivity.
-(* While X >= 0 *)
-apply E_WhileSAT with (be := Bge0 sX) (body := [<{X := X - (IntLit 1)}>; Go_To 1; Finish])
-    (st := X !-> A;  empty_st_3) (n := S O) (pc := none);
+  unfold SAT. exists SAT_assignment_3_1. reflexivity.
+  (* While X >= 0 *)
+  apply E_WhileSAT with (be := Bge0 sX)
+                        (body := [<{X := X - (IntLit 1)}>; Go_To 1; Finish])
+                        (st := X !-> A;  empty_st_3) (n := S O) (pc := none);
   try reflexivity.
-unfold SAT. exists SAT_assignment_3_1. reflexivity.
-(* X := X - 1 *)
-apply E_Assign with (x := X) (ie := <{X - IntLit 1}>) (se := <{A s- Constant 1}>)
-                      (st :=  X !-> A; empty_st_3) (n := S ( S O)) (pc := Pand <{X >= 0}> none); 
-try reflexivity.
-unfold SAT. exists SAT_assignment_3_1. simpl. reflexivity. 
-(* GoTo Top of While **)
-apply E_GoTo with (i := S(O)) (st :=  X !-> <{A s- Constant 1}>; X !-> A; empty_st_3)(n :=  S ( S (S O)))(pc := Pand <{X >= 0}> none); 
-try reflexivity.
-unfold SAT. exists SAT_assignment_3_1. simpl. reflexivity. 
-(* While X >=0 (this time its not) **)
-apply E_WhileUnSAT with (body := [<{X := X - (IntLit 1)}>; Go_To 1; Finish]) (be := Bge0 (SymSub sX (Constant 1))) (st :=  X !-> <{A s- Constant 1}>; X !-> A; empty_st_3)(n :=  S O)(pc := Pand <{X >= 0}> none);
-try reflexivity. apply prog3_after_1_iteration.
-unfold SAT. exists SAT_assignment_3_1. simpl. reflexivity. 
-(* Done with `true` branch **)
-apply E_Finish with (st :=  X !-> <{A s- Constant 1}>; X !-> A; empty_st_3)(n :=  S( S ( S (S(S O)))))
-(pc := Pand <{ ~ sX s- (Constant 1) >= 0 }>
-        (Pand <{ X >= 0 }> none));
-try reflexivity. unfold SAT. exists SAT_assignment_3_1. simpl. reflexivity. 
-(* Done with `false` branch (loop never executes) **)
-apply E_Finish with (st :=  X !-> A; empty_st_3)(n :=  S( S (S ( S (S O)))))(pc := Pand <{ ~ sX >= 0 }> none);
-try reflexivity. unfold SAT. exists SAT_assignment_3_2. simpl. reflexivity.
+  unfold SAT. exists SAT_assignment_3_1. reflexivity.
+  (* X := X - 1 *)
+  apply E_Assign with (x := X) (ie := <{X - IntLit 1}>) (se := <{A s- Constant 1}>)
+                      (st :=  X !-> A; empty_st_3) (n := S (S O))
+                      (pc := Pand <{X >= 0}> none); 
+  try reflexivity.
+  unfold SAT. exists SAT_assignment_3_1. simpl. reflexivity. 
+  (* GoTo Top of While *)
+  apply E_GoTo with (i := S O) (st :=  X !-> <{A s- Constant 1}>; X !-> A; empty_st_3) 
+                    (n :=  S ( S (S O))) (pc := Pand <{X >= 0}> none); 
+  try reflexivity.
+  unfold SAT. exists SAT_assignment_3_1. simpl. reflexivity. 
+  (* While X >=0 (this time it's not) *)
+  apply E_WhileUnSAT with (body := [<{X := X - (IntLit 1)}>; Go_To 1; Finish])
+                          (be := Bge0 (SymSub sX (Constant 1)))
+                          (st :=  X !-> <{A s- Constant 1}>; X !-> A; empty_st_3)
+                          (n :=  S O) (pc := Pand <{X >= 0}> none);
+  try reflexivity. apply prog3_after_1_iteration.
+  unfold SAT. exists SAT_assignment_3_1. simpl. reflexivity. 
+  (* Done with 'true' branch *)
+  apply E_Finish with (st :=  X !-> <{A s- Constant 1}>; X !-> A; empty_st_3)
+                      (n :=  S (S (S (S (S O)))))
+                      (pc := Pand <{ ~ sX s- (Constant 1) >= 0 }>
+                        (Pand <{ X >= 0 }> none));
+  try reflexivity. unfold SAT. exists SAT_assignment_3_1. simpl. reflexivity. 
+  (* Done with 'false' branch (loop never executes) *)
+  apply E_Finish with (st :=  X !-> A; empty_st_3) (n :=  S (S (S (S (S O)))))
+                      (pc := Pand <{ ~ sX >= 0 }> none);
+  try reflexivity. unfold SAT. exists SAT_assignment_3_2. simpl. reflexivity.
 Qed.
 
-(* This symbolic execution tree ends with two leaves.*)
-Definition prog_3_leaves := [(Pand <{ ~ sX s- (Constant 1) >= 0 }>
-        (Pand <{ X >= 0 }> none));
-Pand <{ ~ sX >= 0 }> none].
+(** This symbolic execution tree ends with two leaves. *)
+Definition prog_3_leaves := 
+  [(Pand <{ ~ sX s- (Constant 1) >= 0 }> (Pand <{ X >= 0 }> none)) ;
+   Pand <{ ~ sX >= 0 }> none].
 
-(* This proves that the first leaf node does not appear later in the  list of
-leaves. This is sufficient for this case where we just have two leaves, but the idea of the proof
-would be the same for more leaves, just having to repeat for the subsequent sublists of leaves.*)
-Theorem property_3_ex_3 : forall (pc :PathCond), 
-(get_head_pc prog_3_leaves) = pc -> ~ (In pc (tl prog_3_leaves)).
- Proof.
- intros. unfold not. unfold prog_3_leaves. intros. inversion H0. simpl in H. 
+(** This proves that the first leaf node does not appear later in the list of
+    leaves. This is sufficient for this case where we just have two leaves, but the
+    idea of the proof would be the same for more leaves, just having to repeat for
+    the subsequent sublists of leaves. *)
+Theorem property_3_ex_3 : forall (pc : PathCond), 
+  (get_head_pc prog_3_leaves) = pc -> ~ (In pc (tl prog_3_leaves)).
+Proof.
+  intros. unfold not. unfold prog_3_leaves. intros. inversion H0. simpl in H. 
   rewrite <- H in H1. discriminate H1. simpl in H1. destruct H1.
 Qed.
 
-(* ======================  End:  Proof of Property 2 for Program 3. ======================*)
+(* ===================  End:  Proof of Property 2 for Program 3. ==================== *)
 
-(* ========================== Definiton of Conventional Execution  =============================*)
+(* ==================== Definiton of Conventional Execution  ======================== *)
 
-(* This section will define a conventional (concrete) execution in order for us to then prove the 
- commutativity of the symbolic execution of our examples. Almost all of the functions, types
- and relations defined in this section are analagous to the ones in the symbolic section 
- except that they operate over concreteStates only. *)
+(** This section will define a conventional (concrete) execution in order for us to
+    then prove the commutativity of the symbolic execution of our examples. Almost
+    all of the functions, types and relations defined in this section are analagous
+    to the ones in the symbolic section, except that they operate over ConcreteStates
+    only. *)
 
 Inductive ConcreteTreeNode : Type :=
   | ConcreteNode (s : concreteState) (pc : PathCond) (index : nat).
@@ -837,20 +876,25 @@ Inductive ConcreteExecutionTree : Type :=
 Fixpoint conventional_inteval (ie: IntExp) (mappings:  concreteState) :=
   match ie with 
   | IntLit n => n
-  | IntAdd n1 n2 => (conventional_inteval n1 mappings) + (conventional_inteval n2  mappings)
-  | IntSub n1 n2 => (conventional_inteval n1 mappings ) - (conventional_inteval n2 mappings)
-  | IntMult n1 n2 => (conventional_inteval n1 mappings) * (conventional_inteval n2 mappings)
+  | IntAdd n1 n2 => (conventional_inteval n1 mappings) +
+                    (conventional_inteval n2  mappings)
+  | IntSub n1 n2 => (conventional_inteval n1 mappings ) -
+                    (conventional_inteval n2 mappings)
+  | IntMult n1 n2 => (conventional_inteval n1 mappings) *
+                     (conventional_inteval n2 mappings)
   | IntId x => mappings x
 end.
 
-Inductive node_eval_conventional : Program -> ConcreteTreeNode -> ConcreteExecutionTree -> Prop :=
+Inductive node_eval_conventional :
+  Program -> ConcreteTreeNode -> ConcreteExecutionTree -> Prop :=
   | E_AssignConcrete : forall prog node x ie st n pc tree',
     extractConventionalState node = st ->
     extractConventionalIndex node = n ->
     extractConventionalPathCond node = pc ->
     (SAT pc) ->
     (findStatement prog n) = <{x := ie}> ->
-    node_eval_conventional prog (ConcreteNode (x !-> conventional_inteval ie st ; st) pc (n+1)) tree' ->
+    node_eval_conventional prog
+      (ConcreteNode (x !-> conventional_inteval ie st ; st) pc (n+1)) tree' ->
     node_eval_conventional prog node (ConcreteTr node [tree'])
 
   | E_IfSATConcrete : forall prog node be then_body else_body st n pc tree1' tree2',
@@ -860,7 +904,8 @@ Inductive node_eval_conventional : Program -> ConcreteTreeNode -> ConcreteExecut
     (findStatement prog n) = <{if be then then_body else else_body end}> ->
     (SAT pc) -> 
     node_eval_conventional prog (ConcreteNode st (Pand be pc) (n+1)) tree1' ->
-    node_eval_conventional prog (ConcreteNode st (Pand (Bnot be) pc) (n + (length then_body))) tree2' ->
+    node_eval_conventional prog (ConcreteNode st (Pand (Bnot be) pc)
+      (n + (length then_body))) tree2' ->
     node_eval_conventional prog node (ConcreteTr node [tree1' ; tree2'])
 
   | E_IfUnSATConcrete : forall prog node be then_body else_body st n pc tree,
@@ -869,7 +914,8 @@ Inductive node_eval_conventional : Program -> ConcreteTreeNode -> ConcreteExecut
     extractConventionalPathCond node = pc ->
     (findStatement prog n) = <{if be then then_body else else_body end}> ->
     (SAT (Pand (Bnot be) pc)) ->
-    node_eval_conventional prog (ConcreteNode st (Pand (Bnot be) pc) (n + (length then_body))) tree ->
+    node_eval_conventional prog (ConcreteNode st (Pand (Bnot be) pc)
+      (n + (length then_body))) tree ->
     node_eval_conventional prog node (ConcreteTr node [tree])
 
   | E_GoToConcrete: forall prog node i st n pc tree',
@@ -888,7 +934,8 @@ Inductive node_eval_conventional : Program -> ConcreteTreeNode -> ConcreteExecut
     (findStatement prog n) = <{while be do body end}> ->
     (SAT pc) ->
     node_eval_conventional prog (ConcreteNode st (Pand be pc) (n + 1)) tree1' ->
-    node_eval_conventional prog (ConcreteNode st (Pand (Bnot be) pc) (n + (length body) + 1)) tree2' ->
+    node_eval_conventional prog (ConcreteNode st (Pand (Bnot be) pc)
+      (n + (length body) + 1)) tree2' ->
     node_eval_conventional prog node (ConcreteTr node [tree1' ; tree2'])
 
   | E_WhileUnSATConcrete: forall prog node be body st n pc tree,
@@ -897,7 +944,8 @@ Inductive node_eval_conventional : Program -> ConcreteTreeNode -> ConcreteExecut
     extractConventionalPathCond node = pc ->
     (findStatement prog n) = <{while be do body end}> ->
     (SAT (Pand (Bnot be) pc)) ->
-    node_eval_conventional prog (ConcreteNode st (Pand (Bnot be) pc) (n + (length body) + 1)) tree ->
+    node_eval_conventional prog (ConcreteNode st (Pand (Bnot be) pc)
+      (n + (length body) + 1)) tree ->
     node_eval_conventional prog node (ConcreteTr node [tree])
 
   | E_FinishConcrete: forall prog node st n pc,
@@ -908,83 +956,102 @@ Inductive node_eval_conventional : Program -> ConcreteTreeNode -> ConcreteExecut
     (findStatement prog n) = Finish ->
     node_eval_conventional prog node (ConcreteTr node []).
 
-(* ========================== End Definiton of Conventional Execution  ==============================================*)
+(* ================= End Definiton of Conventional Execution  ====================== *)
 
-(* ========================== Proof of Property 3 for Program 1 ==============================================*)
-Definition start_state_1: concreteState := ( A !-> 1; B !-> 2; C!-> 1; X !-> 0; Y !-> 0; Z !-> 0; _ !-> ( 0)).
-Definition intermediate_state_1: concreteState := ( A !-> 1; B !-> 2; C!-> 1; X !-> 3; Y !-> 3; Z !-> 0; _ !-> ( 0)).
-Definition final_state_1: concreteState := ( A !-> 1; B !-> 2; C!-> 1; X !-> 3; Y !-> 3; Z !-> 4; _ !-> ( 0)).
+(* =================== Proof of Property 3 for Program 1 =========================== *)
+Definition start_state_1: concreteState :=
+  (A !-> 1; B !-> 2; C!-> 1; X !-> 0; Y !-> 0; Z !-> 0; _ !-> 0).
+Definition intermediate_state_1: concreteState :=
+  (A !-> 1; B !-> 2; C!-> 1; X !-> 3; Y !-> 3; Z !-> 0; _ !-> 0).
+Definition final_state_1: concreteState :=
+  (A !-> 1; B !-> 2; C!-> 1; X !-> 3; Y !-> 3; Z !-> 4; _ !-> 0).
 
-(* Proof the following concrete execution tree is correct for prog 1.*)
+(** Proof the following concrete execution tree is correct for prog 1.*)
 Example prog_1_eval_conventional :
   node_eval_conventional prog_1 (ConcreteNode start_state_1 none 0)
     (ConcreteTr (ConcreteNode start_state_1 none 0) [(
-      ConcreteTr (ConcreteNode (X !-> start_state_1 A + start_state_1 B; start_state_1) none 1) [(
-        ConcreteTr (ConcreteNode (Y !-> start_state_1 B + start_state_1 C; X !-> start_state_1 A + start_state_1 B ; start_state_1) none 2) [(
-          ConcreteTr (ConcreteNode (Z !-> intermediate_state_1 X + intermediate_state_1 Y  - start_state_1 B; Y !-> start_state_1 B + start_state_1 C;
-                    X !-> start_state_1 A + start_state_1 B; start_state_1) none 3) nil
+      ConcreteTr (ConcreteNode (X !-> start_state_1 A + start_state_1 B; 
+                  start_state_1) none 1) [(
+        ConcreteTr (ConcreteNode (Y !-> start_state_1 B + start_state_1 C;
+                    X !-> start_state_1 A + start_state_1 B ; start_state_1) none 2) [(
+          ConcreteTr (ConcreteNode (Z !-> intermediate_state_1 X + intermediate_state_1
+                      Y - start_state_1 B; Y !-> start_state_1 B + start_state_1 C;
+                      X !-> start_state_1 A + start_state_1 B; start_state_1) none 3) nil
     )])])]).
 Proof.
   (* X := A + B *)
   apply E_AssignConcrete with (x := X) (ie := <{A + B}>)
-                      (st := start_state_1) (n := O) (pc := none); try reflexivity.
-    unfold SAT. exists final_state_1. simpl. reflexivity. 
+                              (st := start_state_1) (n := O) (pc := none);
+  try reflexivity.
+  unfold SAT. exists final_state_1. simpl. reflexivity. 
   (* Y := B + C*)
   apply E_AssignConcrete with (x := Y) (ie := <{B + C}>) 
-                      (st := X !-> start_state_1 A + start_state_1 B; start_state_1)
-                      (n := S O) (pc := none); try reflexivity.
-    unfold SAT. exists final_state_1. simpl. reflexivity.
+                              (st := X !-> start_state_1 A + start_state_1 B;
+                               start_state_1)
+                              (n := S O) (pc := none); try reflexivity.
+  unfold SAT. exists final_state_1. simpl. reflexivity.
     (* Z := X + Y - B *)
   apply E_AssignConcrete with (x := Z ) (ie := <{X + Y - B}>)
-                      (st := Y !-> start_state_1 B + start_state_1 C; X !-> start_state_1 A + start_state_1 B ; start_state_1)
-                      (n := S (S O)) (pc := none); try reflexivity.
-    unfold SAT. exists final_state_1. simpl. reflexivity.
-  apply E_FinishConcrete with (st := Z !-> intermediate_state_1 X + intermediate_state_1 Y  - start_state_1 B; Y !-> start_state_1 B + start_state_1 C;
-                    X !-> start_state_1 A + start_state_1 B; start_state_1)
-                      (n := S (S (S O))) (pc := none); try reflexivity.
-    unfold SAT. exists final_state_1. simpl. reflexivity.
+                              (st := Y !-> start_state_1 B + start_state_1 C;
+                               X !-> start_state_1 A + start_state_1 B ; start_state_1)
+                              (n := S (S O)) (pc := none);
+  try reflexivity.
+  unfold SAT. exists final_state_1. simpl. reflexivity.
+  apply E_FinishConcrete with (st := Z !-> intermediate_state_1 X + intermediate_state_1 
+                               Y - start_state_1 B;
+                               Y !-> start_state_1 B + start_state_1 C;
+                               X !-> start_state_1 A + start_state_1 B; start_state_1)
+                              (n := S (S (S O))) (pc := none);
+  try reflexivity.
+  unfold SAT. exists final_state_1. simpl. reflexivity.
 Qed.
 
-(* Conventional execution tree for example 1. Proved correct above. *)
-Definition prog_1_conventional_tree :=   node_eval_conventional prog_1 (ConcreteNode start_state_1 none 0)
+(** Conventional execution tree for example 1. Proved correct above. *)
+Definition prog_1_conventional_tree := 
+  node_eval_conventional prog_1 (ConcreteNode start_state_1 none 0)
     (ConcreteTr (ConcreteNode start_state_1 none 0) [(
-      ConcreteTr (ConcreteNode (X !-> start_state_1 A + start_state_1 B; start_state_1) none 1) [(
-        ConcreteTr (ConcreteNode (Y !-> start_state_1 B + start_state_1 C; X !-> start_state_1 A + start_state_1 B ; start_state_1) none 2) [(
-          ConcreteTr (ConcreteNode (Z !-> intermediate_state_1 X + intermediate_state_1 Y  - start_state_1 B; Y !-> start_state_1 B + start_state_1 C;
-                    X !-> start_state_1 A + start_state_1 B; start_state_1) none 3) nil
+      ConcreteTr (ConcreteNode (X !-> start_state_1 A + start_state_1 B; 
+                  start_state_1) none 1) [(
+        ConcreteTr (ConcreteNode (Y !-> start_state_1 B + start_state_1 C;
+                    X !-> start_state_1 A + start_state_1 B ; start_state_1) none 2) [(
+          ConcreteTr (ConcreteNode (Z !-> intermediate_state_1 X + intermediate_state_1
+                      Y - start_state_1 B; Y !-> start_state_1 B + start_state_1 C;
+                      X !-> start_state_1 A + start_state_1 B; start_state_1) none 3) nil
     )])])]).
 
-(* Final concrete node (i.e. leaf) in example 1's conventional tree. *)
-Definition final_concrete_node_ex_1 := ConcreteNode (Z !-> intermediate_state_1 X + intermediate_state_1 Y  - start_state_1 B; Y !-> start_state_1 B + start_state_1 C;
-                    X !-> start_state_1 A + start_state_1 B; start_state_1) none 3.
+(** Final concrete node (i.e. leaf) in example 1's conventional tree. *)
+Definition final_concrete_node_ex_1 :=
+  ConcreteNode (Z !-> intermediate_state_1 X + intermediate_state_1 Y - start_state_1 B;
+                Y !-> start_state_1 B + start_state_1 C;
+                X !-> start_state_1 A + start_state_1 B; start_state_1) none 3.
 
-(* Function used to show equivalence of two states for example 1.*)
+(** Function used to show equivalence of two states for example 1.*)
 Definition ex_1_states_equivalent (s1 s2 : concreteState) : bool :=
-  if  Z.eqb (s1 X) (s2 X) then 
+  if Z.eqb (s1 X) (s2 X) then 
   if Z.eqb (s1 Y) (s2 Y) then 
   if Z.eqb (s1 Z) (s2 Z) then 
   if Z.eqb (s1 A) (s2 A) then 
   if Z.eqb (s1 B) (s2 B) then 
   if Z.eqb (s1 C) (s2 C) then true else false else false else false else false else false else false.
               
-(* The final state of the concrete execution tree is the same as the SAT_assignment
-  for the symbolic execution of the same example.*)                     
+(** The final state of the concrete execution tree is the same as the SAT_assignment
+    for the symbolic execution of the same example.*)                     
 Theorem eval_1_commutative :  
   ex_1_states_equivalent (extractConventionalState final_concrete_node_ex_1) SAT_assign_ex_1 = true.
-Proof.
-simpl. reflexivity. Qed.
+Proof. simpl. reflexivity. Qed.
 
-(* ========================== End: Proof of Property 3 for Program 1 ==============================================*)
+(* =================== End: Proof of Property 3 for Program 1 ====================== *)
 
-(* ========================== Start: Proof of Property 3 for Program 2 ==============================================*)
+(* ================== Start: Proof of Property 3 for Program 2 ===================== *)
 
-Definition start_state_2: concreteState := ( X !-> 1; Y !-> 0; _ !-> ( 0)).
-Definition final_state_2_true_branch: concreteState := (J !-> 1 ; Z !-> 1 ; X !-> 1; Y !-> 0; _ !-> ( 0)).
+Definition start_state_2: concreteState := ( X !-> 1; Y !-> 0; _ !-> 0).
+Definition final_state_2_true_branch: concreteState :=
+  (J !-> 1 ; Z !-> 1 ; X !-> 1; Y !-> 0; _ !-> 0).
 Definition start_state_2_false_branch: concreteState := (X !-> 1; Y !-> -2; _ !-> (0)).
 
-(* As done in the previous example, we provide a proof that this conventional 
- execution tree is correct for this example so we can use information in its leaf nodes
- to prove commutatitivy. *)
+(** As done in the previous example, we provide a proof that this conventional 
+    execution tree is correct for this example so we can use information in its leaf
+    nodes to prove commutatitivy. *)
 Example prog_2_eval_conventional :
   node_eval_conventional prog_2 (ConcreteNode start_state_2 none 0)
     (ConcreteTr (ConcreteNode start_state_2 none 0) [(
@@ -1047,7 +1114,7 @@ Qed.
 
 (* We prove that each of the two paths through this program are commutative.*)
 
-(* === Start:  Proof of Property 3 for Prog 2 Path 1 (True Branch) === *)
+(* ========== Start:  Proof of Property 3 for Prog 2 Path 1 (True Branch) ========== *)
 Definition final_concrete_node_ex_2_true_branch :=
     ConcreteNode (Y !-> final_state_2_true_branch Y - final_state_2_true_branch J ;
    Z !-> final_state_2_true_branch Z * final_state_2_true_branch X;J !-> 1 ; Z !-> 1 ; start_state_2) (Pand <{ ~ sY s- sJ >= 0 }>
@@ -1089,9 +1156,9 @@ split.
 - simpl. reflexivity.
 - simpl. reflexivity. Qed.
 
-(* === End: Proof of Property 3 for Prog 2 Path 1 (True Branch) === *)
+(* =========== End: Proof of Property 3 for Prog 2 Path 1 (True Branch) =========== *)
 
-(* === Start: Proof of Property 3 for Prog 2 Path 2 (False Branch) === *)
+(* ========== Start: Proof of Property 3 for Prog 2 Path 2 (False Branch) ========= *)
 
 Definition final_concrete_node_state_false :=
 (J !-> 1 ; Z !-> 1 ; start_state_2_false_branch). 
@@ -1115,17 +1182,17 @@ Proof.
  - simpl. reflexivity. Qed.
 (* === End: Proof of Property 3 for Prog 2 Path 2 (False Branch) === *)
 
-(* ========================== End: Proof of Property 3 for Program 2 ==============================================*)
+(* =================== End: Proof of Property 3 for Program 2 ====================== *)
 
-(* ========================== Start: Proof of Property 3 for Program 3 ==============================================*)
+(* ================== Start: Proof of Property 3 for Program 3 ===================== *)
 
 (* start state for iterating once and stopping *)
-Definition start_state_3_1: concreteState := ( A !-> 0; _ !-> ( 0)).
-Definition end_state_3_1 := ( X !-> -1; A !-> 0; _ !-> ( 0)).
+Definition start_state_3_1: concreteState := ( A !-> 0; _ !-> 0).
+Definition end_state_3_1 := ( X !-> -1; A !-> 0; _ !-> 0).
 
 (* start state for never looping *)
-Definition start_state_3_2: concreteState := ( X !-> -1; A !-> -1; _ !-> ( 0)).
-Definition end_state_3_2 : concreteState := ( X !-> -1 ; A !-> -1; _ !-> ( 0)).
+Definition start_state_3_2: concreteState := ( X !-> -1; A !-> -1; _ !-> 0).
+Definition end_state_3_2 : concreteState := ( X !-> -1 ; A !-> -1; _ !-> 0).
 
 (* Proof that this conventional execution tree is correct for this example so we can use 
 information in its leaf nodes to prove commutatitivy. *)
@@ -1190,7 +1257,7 @@ Qed.
  Reminder: we call the case that the loop executes the `True branch` and the case
  that the loop never executes the `False branch`*)
 
-(* === Start: Proof of Property 3 for Prog 2 Path 1 (True Branch) === *)
+(* =========== Start: Proof of Property 3 for Prog 2 Path 1 (True Branch) =========== *)
 Definition final_concrete_node_ex_3_true_branch :=
     (ConcreteNode (X !-> start_state_3_1 X - 1 ; X !-> start_state_3_1 A; start_state_3_1)
                (      Pand <{ ~ sX s- (Constant 1) >= 0 }>
@@ -1227,9 +1294,9 @@ split.
 - simpl. reflexivity.
 - simpl. reflexivity. Qed.
 
-(* === End: Proof of Property 3 for Prog 3 Path 1 (True Branch) === *)
+(* =========== End: Proof of Property 3 for Prog 3 Path 1 (True Branch) ============ *)
 
-(* === Start of Proof of Property 3 for Prog 3 Path 2 (False Branch) === *)
+(* ========= Start of Proof of Property 3 for Prog 3 Path 2 (False Branch) ========= *)
  
 
 Definition final_symbolic_node_state_false_3 := 
@@ -1249,4 +1316,4 @@ Proof.
  split.
  - simpl. reflexivity. 
  - simpl. reflexivity. Qed.
-(* ========================== End: Proof of Property 3 for Program 3 ==============================================*)
+(* ================ End: Proof of Property 3 for Program 3 ========================= *)
