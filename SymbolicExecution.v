@@ -6,31 +6,31 @@ From LF Require Import Maps.
 From Coq Require Import Lists.List.
 Import ListNotations.
 
-(* Table of Contents:
- - Definition Symbolic Execution Concepts (Minimum goal)
- - General Proof of Property 1 (Standard Goal)
- - Proof of Property 2 for:  (Standard Goal)
-    * Figure 1 in King Paper
-    * Modified Figure 2 in King Paper
-    * While loop example
- - Proof of Property 2 for: (Reach Goal)
-    * Figure 1 in King Paper
-    * Modified Figure 2 in King Paper
-    * While loop example
+(** Table of Contents:
+  - Definition Symbolic Execution Concepts (Minimum goal)
+  - General Proof of Property 1 (Standard Goal)
+  - Proof of Property 2 for:  (Standard Goal)
+      * Figure 1 in King Paper
+      * Modified Figure 2 in King Paper
+      * While loop example
+  - Proof of Property 2 for: (Reach Goal)
+      * Figure 1 in King Paper
+      * Modified Figure 2 in King Paper
+      * While loop example
 
-  Property 1: Path condition is never identically false. 
-  Property 2: All leave nodes in a symbolic execution tree are distinct. 
-  Property 3: Symbolic execution is commutative. *)
+    Property 1: Path condition is never identically false. 
+    Property 2: All leave nodes in a symbolic execution tree are distinct. 
+    Property 3: Symbolic execution is commutative. *)
 
 Declare Custom Entry com.
 Declare Scope com_scope.
 
-(* ================= Start: Definition of Symbolic Execution Concepts. ================*)
+(* ============= Start: Definition of Symbolic Execution Concepts. =============== *)
 
 (** Inspired by the AExp from the Imp chapter. The only difference is that 
-we are using the built-in integer type, Z. The Integer language as defined in
-the King paper only provides support for addition, subtraction and multiplcation, too.
-*)
+    we are using the built-in integer type, Z. The Integer language as defined in
+    the King paper only provides support for addition, subtraction and
+    multiplcation, similar to Imp. *)
 Inductive IntExp : Type :=
 | IntLit (n : Z)
 | IntAdd (n1 n2: IntExp)
@@ -39,7 +39,8 @@ Inductive IntExp : Type :=
 | IntId (x : string).
 
 (** The state of a program during symbolic execution is represtented by a total map
-of symbolic expressions. *)
+    of symbolic expressions. The symbolic expressions themselves are integer
+    expressions with symbolic variables. *)
 Inductive SymbolicExp : Type :=
   | Symbol (s: string)
   | SymAdd (s1 s2: SymbolicExp)
@@ -47,26 +48,27 @@ Inductive SymbolicExp : Type :=
   | SymMult (s1 s2: SymbolicExp)
   | Constant (n : Z).
 
-(* Also inspired by the BExp from Imp. The only boolean expression allowed in the 
- King paper is the check that something is >=, so we only provide support for that
- case as well as negation.*)
+(** Also inspired by the BExp from Imp. The only boolean expression allowed in the 
+    King paper is the check that something is >=, so we only provide support for that
+    case and negation.*)
 Inductive BoolExp : Type :=
   | BTrue
   | BFalse
   | Bnot (b : BoolExp)
   | Bge0 (n : SymbolicExp).
 
-(* We represent a symbolic program state as a total map of symbolic expressions
-  and the concrete state is a total map of Integers. *)
+(** We represent a symbolic program state as a total map of symbolic expressions
+    and the concrete state is a total map of Integers. *)
 Definition state := total_map SymbolicExp.
 Definition concreteState := total_map Z.
 
-(* A path condition is built up of a series of boolean expressions. *)
+(** A path condition is a list of boolean expressions connected by conjunction. *)
 Inductive PathCond : Type :=
 | none
 | Pand (be : BoolExp) (p : PathCond).
             
-(* This function is used to concretize a symbolic expression given a concrete state. *)
+(** This function is used to resolve a symbolic expression to an integer, given
+    a concrete state. *)
 Fixpoint substitute (se: SymbolicExp) (mappings: concreteState): Z  :=
   match se with
   | Symbol s => mappings s
@@ -76,8 +78,8 @@ Fixpoint substitute (se: SymbolicExp) (mappings: concreteState): Z  :=
   | Constant n => n
   end.
 
-(* This function is used to evaluate an integer expression, similar to Imp but taking
-  into account our notion of program state. *)
+(** This function is used to evaluate an integer expression, similar to Imp but taking
+    into account our symbolic notion of program state. *)
 Fixpoint inteval (ie: IntExp) (s: state) (mappings:  concreteState) : Z :=
   match ie with 
   | IntLit n => n
@@ -88,8 +90,8 @@ Fixpoint inteval (ie: IntExp) (s: state) (mappings:  concreteState) : Z :=
 end.
 
 
-(* This function is used to evaluate a boolean expression, similar to Imp but taking
-  into account our notion of program state. *)
+(** This function is used to evaluate a boolean expression, similar to Imp but taking
+    into account our notion of program state. *)
 Fixpoint beval (b : BoolExp) (mappings: concreteState) : bool :=
   match b with
   | BTrue   => true
@@ -98,16 +100,16 @@ Fixpoint beval (b : BoolExp) (mappings: concreteState) : bool :=
   | Bge0 n => 0 <=? substitute n mappings
   end.
 
-(* This function is used to evaluate a path condition given a concrete state. *)
+(** This function is used to evaluate a path condition given a concrete state. *)
 Fixpoint eval_pc (pc: PathCond) (mappings: concreteState ) : bool :=
   match pc with 
   | none => true
   | Pand be p => match be with
-                | BTrue => eval_pc p mappings
-                | BFalse => false
-                | Bge0 n => (0 <=? substitute n mappings) && eval_pc p mappings
-                | Bnot b => (negb (beval b mappings)) && eval_pc p mappings
-                end
+    | BTrue => eval_pc p mappings
+    | BFalse => false
+    | Bge0 n => (0 <=? substitute n mappings) && eval_pc p mappings
+    | Bnot b => (negb (beval b mappings)) && eval_pc p mappings
+    end
   end.
 
 
@@ -128,10 +130,9 @@ Definition Z: string := "Z".
 (** The empty state will map each parameter to its symbolic variable, and
     each local variable to the default value of 0. *)
 Definition empty_st := ( A !-> sA; B !-> sB; C !-> sC; _ !-> (Constant 0)).
-Definition SAT_assign: concreteState := ( A !-> 0; B !-> 0; C !-> 0; _ !-> ( 0)).
 
-(** SAT is a property of any given pc, saying that there exist concrete values
-    which make it satisfiable. *)
+(** SAT is a property of any given path condition, saying that there exist concrete 
+    values which make it satisfiable. *)
 Definition SAT (pc: PathCond) := exists (cs: concreteState), eval_pc pc cs = true.
 
 (** For example, The trivial path condition 'true' is satisfiable by the
@@ -139,11 +140,13 @@ Definition SAT (pc: PathCond) := exists (cs: concreteState), eval_pc pc cs = tru
 Definition ex_pc := Pand BTrue none.
 Example ex_pc_sat : SAT ex_pc.
 Proof.
-  unfold SAT. exists (( _ !-> ( 0))). simpl. reflexivity.
+  unfold SAT. exists ( _ !-> 0). simpl. reflexivity.
 Qed.
 
-(** When we evaluate ex_pc with this map, we get the boolean true. *)
-Definition SAT_assign_ex_1: concreteState := ( A !-> 1; B !-> 2; C!-> 1; X !-> 3; Y !-> 3; Z !-> 4; _ !-> ( 0)).
+(** When we evaluate ex_pc with this trivial path condition, we get the boolean
+    true. *)
+Definition SAT_assign_ex_1: concreteState := 
+  ( A !-> 1; B !-> 2; C!-> 1; X !-> 3; Y !-> 3; Z !-> 4; _ !-> 0).
 Compute eval_pc ex_pc SAT_assign_ex_1.
 
 
@@ -152,17 +155,16 @@ Compute eval_pc ex_pc SAT_assign_ex_1.
     is satisfiable by the map that takes sA to 1 and all other symbolic
     variables to 0. *)
 Definition ex_pc_2 := Pand BTrue (Pand (Bge0 sA) none).
-Definition SAT_assign_ex_2: concreteState := ( A !-> 1; _ !-> ( 0)).
+Definition SAT_assign_ex_2: concreteState := (A !-> 1; _ !-> 0).
 Compute eval_pc ex_pc SAT_assign_ex_2.
 Example ex_pc_sat_2 : SAT ex_pc_2.
 Proof.
-  unfold SAT. exists (A !-> 1; ( _ !-> ( 0))). simpl. reflexivity.
+  unfold SAT. exists (A !-> 1; ( _ !-> 0)). simpl. reflexivity.
 Qed.
 
 (** A TreeNode represents one node of our symbolic execution tree.
     It contains a program state, path condition, and an index
-    into the program. The index points to a particular statement in the program.
-*)
+    into the program. The index points to a particular statement in the program. *)
 Inductive TreeNode : Type :=
   | Node (s : state) (pc : PathCond) (index : nat).
 
@@ -198,21 +200,20 @@ Inductive ExecutionTree : Type :=
     flow structures as in the King paper -- if/else, while loops,
     and function calls modeled by go_tos.
 
-    - Assignment statements require a variable name (string) and an integer expression.
-    The value of this variable is updated in the program state.
+    - Assignment statements require a variable name (string) and an integer
+      expression. The value of this variable is updated in the program state.
 
     - If statements are represented by a boolean expression for the condition,
-    a then_block and an else_block. Both of these blocks contain a list of
-    statements.
+      a then_block and an else_block. Both of these blocks contain a list of
+      statements.
 
     - While loops are similarlly reprsented by a boolean expression and a
-    list of body statements.
+      list of body statements.
 
     - Go_To statements contain the index of the statement we would like to jump to.
 
     - Finish statements indicate the end of a program. These aren't in the origininal
-    paper, but make some of our computations easier.
-*)
+      paper, but make some of our computations easier. *)
 Inductive Statement := 
   | Assignment (x: string) (a: IntExp) 
   | If (b: BoolExp) (then_block: list Statement) (else_then: list Statement)
@@ -223,8 +224,8 @@ Inductive Statement :=
 (** As mentioned above, each program is represented as a list of statements. *)
 Definition Program := list Statement.
 
-(** This function is used to compute the length of a program. The gas parameter is needed so that Coq can 
- verify our recursion is decreasing. *)
+(** This function is used to compute the length of a program. The gas parameter is
+    needed so that Coq can verify that our recursion is decreasing. *)
 Fixpoint progLength (prog : Program) (gas : nat) : nat :=
   match gas with
   | O => O 
@@ -247,7 +248,8 @@ Fixpoint progLength (prog : Program) (gas : nat) : nat :=
     statement in a program.
     
     The findStatement function takes in a program and an index. This index
-    is the location of the statement in our program that we would like to execute next.
+    is the location of the statement in our program that we would like to execute
+    next.
     
     If the index parameter is 0, we can just return what is at the head of our list.
     If the index is not 0, we must recursively traverse our program until we arrive
@@ -261,13 +263,12 @@ Fixpoint progLength (prog : Program) (gas : nat) : nat :=
     lists of statements is traversing the program as if the lists were flattened. 
     So for example, if our program has an If statement at index 2 with two
     statements in the then block and two in the else block, the indices of the
-    then block would be 3, 4 and the else block would be 5, 6.
+    then block would be 3, 4, and those of the else block would be 5, 6.
 
-    Under this model, we can calculate the offsets into our `then` (th) and `else` (e) 
+    Under this model, we can calculate the offsets into our 'then' (th) and 'else' (e) 
     lists by simple operations over the lengths of the lists. For example, if the desired 
     index is greater than the length of the then block, we know the desired statement is 
-    either in the else block or outside of the if/else statement entirely.
-*)
+    either in the else block or outside of the if/else statement entirely. *)
 
 (* Constant for default gas parameter.*)
 Definition MAX_PROG_LENGTH := 1000%nat.
@@ -309,7 +310,7 @@ Fixpoint findStatement (prog : Program) (i : nat) : Statement :=
 end.
 
 (** The following notation is inspired by the Imp chapter,
-    with some minor modifications.*)
+    with some minor modifications. *)
 Coercion IntId : string >-> IntExp.
 Coercion Symbol : string >-> SymbolicExp.
 Notation "<{ e }>" := e (at level 0, e custom com at level 99) : com_scope.
@@ -357,7 +358,7 @@ Reserved Notation
 
 Open Scope com_scope. 
 
-(* Inspired by Imp's aeval. This will convert an IntExp into a SymbolicExp. *)
+(** Inspired by Imp's aeval. This will convert an IntExp into a SymbolicExp. *)
 Fixpoint makeSymbolic (s : state) (ie : IntExp) : SymbolicExp :=
   match ie with
   | IntLit n => Constant n
@@ -466,41 +467,45 @@ Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
     node_eval prog node (Tr node []).
 
 (** This should be provable, but we'll skip it in the interest of time. It is stating
-  that if a superset of a condition is satisfiable, then the condition itself is 
-  satisfiable. *)
+    that if a superset of a condition is satisfiable, then the condition itself is 
+    satisfiable. *)
 Axiom superset_SAT : forall (p: PathCond) (be : BoolExp),
- SAT (Pand be p) -> SAT p.
+  SAT (Pand be p) -> SAT p.
 
 (* ================== End: Definition Symbolic Execution Concepts. ==================*)
 
 (* ========================= Start: Proof of Property 1. ============================*)
 
 (** A general proof of property 1 from the King paper, that the 
-  path condition never becomes identically false. 
- hypothesis: prog , node, tree in node_eval relation...; 
-  for all of those things & more, if extract pc from node == pc and this pc is from a node in this relation*)
+    path condition never becomes identically false. 
+
+    hypothesis: (prog, node, tree) is in node_eval relation; 
+    for all of those things & more, if extract pc from node == pc and this pc is from
+    a node in this relation *)
 Theorem property_1 : forall (prog: Program) (node: TreeNode) (tr : ExecutionTree),
  node_eval prog node tr ->
  SAT (extractPathCond node).
 Proof. 
-intros. induction H. 
+  intros. induction H. 
   (* E_Assign *)
   - simpl in IHnode_eval. rewrite H1. apply IHnode_eval. 
   (* E_IFSat *)
   - simpl in IHnode_eval1. inversion H1. rewrite H1. apply H3. 
   (* E_IFUnSAT *)
-   - simpl in IHnode_eval. rewrite H1. apply superset_SAT in IHnode_eval. apply IHnode_eval.  
+    - simpl in IHnode_eval. rewrite H1. apply superset_SAT in IHnode_eval.
+      apply IHnode_eval.  
   (* E_GoTo *)
   - simpl in IHnode_eval. rewrite H1. apply IHnode_eval.
   (* E_WhileSAT *)
   - simpl in IHnode_eval1. inversion H1. rewrite H1. apply H3. 
   (* E_WhileUnSAT *)
-  - simpl in IHnode_eval. rewrite H1. apply superset_SAT in IHnode_eval. apply IHnode_eval. 
+  - simpl in IHnode_eval. rewrite H1. apply superset_SAT in IHnode_eval.
+    apply IHnode_eval. 
   (* E_Finish *)
-   - destruct node. simpl. simpl in H1. rewrite H1. apply H2.
+  - destruct node. simpl. simpl in H1. rewrite H1. apply H2.
 Qed.
 
-(* ========================= End: Proof of Property 1. ===============================*)
+(* ========================= End: Proof of Property 1. ================================*)
 
 (* ====================== Start: Proof of Property 2 for Program 1. ===================*)
 
@@ -544,8 +549,8 @@ Proof.
     unfold SAT. exists SAT_assign_ex_1. simpl. reflexivity.
 Qed.
 
-(* Now that we have proven that this is the correct symbolic execution tree for the 
-  program, we will refer to it as tree_1 *)
+(** Now that we have proven that this is the correct symbolic execution tree for the 
+    program, we will refer to it as tree_1. *)
 Definition tree_1 := 
   (Tr (Node empty_st none 0) [(
     Tr (Node (X !-> <{sA s+ sB}> ; empty_st) none 1) [(
@@ -554,9 +559,10 @@ Definition tree_1 :=
                   X !-> <{sA s+ sB}> ; empty_st) none 3) nil
   )])])]).
 
-(* Property 2 from the paper is that every leaf node is distinct, or in other words, no two 
-leaves have the same path condition. We represent the leaves as a list of the different path conditions
-for each example and prove that there are no duplicates for each. *)
+(** Property 2 from the paper is that every leaf node is distinct, or in other words,
+    no two leaves have the same path condition. We represent the leaves as a list of
+    the different path conditions for each example and prove that there are no
+    duplicates for each. *)
 Definition leaves := list PathCond.
 Definition prog_1_leaves := [none].
 
@@ -566,16 +572,18 @@ Definition get_head_pc (p : leaves) : PathCond :=
   | h :: t => h
  end.
 
-(* The proof of this property for the first example is trivial as there is no 
-branching or control flow.*)
+(** The proof of this property for the first example is trivial, as there is no 
+    branching or control flow.*)
 
 Theorem property_2_ex_1 : forall (pc: PathCond),
-(get_head_pc prog_1_leaves) = pc -> ~ (In pc (tl prog_1_leaves)).
+  (get_head_pc prog_1_leaves) = pc -> ~ (In pc (tl prog_1_leaves)).
 Proof.
-intros. unfold not. unfold prog_1_leaves. simpl. intros. destruct H0. Qed.
-(* ====================== End: Proof of Property 2 for Program 1. ======================*)
+  intros. unfold not. unfold prog_1_leaves. simpl. intros. destruct H0.
+Qed.
 
-(* ====================== Start: Proof of Property 2 for Program 2. ======================*)
+(* ==================== End: Proof of Property 2 for Program 1. ===================== *)
+
+(* ==================== Start: Proof of Property 2 for Program 2. =================== *)
 
 (* Setting up new variable names for example 2. *)
 Definition J: string := "J".
@@ -585,9 +593,9 @@ Definition sZ2 := Constant 1.
 Definition sX := Symbol X.
 
 
-(* The following program is slightly modified from the program in figure 2 of the King
- paper. Instead of Y >= J, we have Y >=0 since the paper claims that their only boolean 
-  operation is >= 0. *)
+(** The following program is slightly modified from the program in figure 2 of the King
+    paper. Instead of Y >= J, we have Y >=0 since the paper claims that their only
+    boolean operation is >= 0. *)
 Definition prog_2 := [<{Z := IntLit 1}>; 
                       <{J := IntLit 1}>;
                       <{if Y >= 0
@@ -600,29 +608,31 @@ Definition prog_2 := [<{Z := IntLit 1}>;
                         Finish].
 
 (* A satisfying assignment for taking the true branch *)
-Definition SAT_assign_prog_2_true_branch: concreteState := ( X !-> 1; Y !-> 0 ; _ !-> 0).
+Definition SAT_assign_prog_2_true_branch: concreteState := (X !-> 1; Y !-> 0 ; _ !-> 0).
 
 (* A satisfying assignment for taking the true branch *)
-Definition SAT_assign_prog_2_false_branch: concreteState := ( X !-> 1 ; Y !-> -2; _ !-> 0).
+Definition SAT_assign_prog_2_false_branch: concreteState :=
+  (X !-> 1 ; Y !-> -2; _ !-> 0).
 
 (* Starting symbolic state for this example.*)
-Definition empty_st_2 := ( A !-> sA; B !-> sB; C !-> sC; J !-> sJ; Z !-> sZ2; Y !-> sY; 
+Definition empty_st_2 := (A !-> sA; B !-> sB; C !-> sC; J !-> sJ; Z !-> sZ2; Y !-> sY; 
   X !-> sX; _ !-> (Constant 0)). 
 
-(* The axiom is needed so that the same if statement can be evaluated with a different symbolic
- value for Y after it's decremented. After the decrement, the symbolic expression changes
- but the original statement in our program does not. The way we've implemented findStatement
- requires an exact match.  *)
+(** The axiom is needed so that the same if statement can be evaluated with a different
+    symbolic value for Y after it's decremented. After the decrement, the symbolic 
+    expression changes, but the original statement in our program does not. The way
+    we've implemented findStatement requires an exact match.  *)
 Axiom cond_after_1_iteration :
 findStatement prog_2 2 =
-<{
-if sY s- sJ >= 0
-then [<{ Z := Z * X }>;
-     <{ Y := Y - J }>;
-     <{ go_to S(S(O)) }>; Finish] else [Finish] end }>.
+<{if sY s- sJ >= 0
+  then [<{ Z := Z * X }>;
+        <{ Y := Y - J }>;
+        <{ go_to S(S(O)) }>;
+        Finish]
+  else [Finish] end }>.
 
-(*This is the tree for the case that the loop (made up of an if/then + go_to) only executes once.
-We prove that is a correct tree for the above prog_2. *)
+(** This is the tree for the case that the loop (made up of an if/then + go_to) only
+    executes once. We prove that is a correct tree for the above prog_2. *)
 Example prog_2_eval :
   node_eval prog_2 (Node empty_st_2 none 0)
     (Tr (Node empty_st_2 none 0) [(
