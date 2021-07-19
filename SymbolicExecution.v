@@ -23,7 +23,7 @@ Import ListNotations.
     Property 3: Symbolic execution is commutative. *)
 
 Declare Custom Entry com.
-Declare Scope com_scope.
+(* Declare Scope com_scope *)
 
 (* ============= Start: Definition of Symbolic Execution Concepts. =============== *)
 
@@ -55,7 +55,13 @@ Inductive BoolExp : Type :=
   | BTrue
   | BFalse
   | Bnot (b : BoolExp)
-  | Bge0 (n : SymbolicExp).
+  | Bge0 (n : IntExp).
+
+Inductive SBoolExp : Type :=
+  | SBTrue
+  | SBFalse
+  | SBnot (b : SBoolExp)
+  | SBge0 (n : SymbolicExp).
 
 (** We represent a symbolic program state as a total map of symbolic expressions
     and the concrete state is a total map of Integers. *)
@@ -65,28 +71,36 @@ Definition concreteState := total_map Z.
 (** A path condition is a list of boolean expressions connected by conjunction. *)
 Inductive PathCond : Type :=
 | none
-| Pand (be : BoolExp) (p : PathCond).
+| Pand (be : SBoolExp) (p : PathCond).
             
 (** This function is used to resolve a symbolic expression to an integer, given
     a concrete state. *)
-Fixpoint substitute (se: SymbolicExp) (mappings: concreteState): Z  :=
+Fixpoint substituteInt (se: SymbolicExp) (mappings: concreteState): Z  :=
   match se with
   | Symbol s => mappings s
-  | SymAdd s1 s2 => (substitute s1 mappings) + (substitute s2 mappings)
-  | SymSub s1 s2 => (substitute s1 mappings) - (substitute s2 mappings)
-  | SymMult s1 s2 => (substitute s1 mappings) * (substitute s2 mappings)
+  | SymAdd s1 s2 => (substituteInt s1 mappings) + (substituteInt s2 mappings)
+  | SymSub s1 s2 => (substituteInt s1 mappings) - (substituteInt s2 mappings)
+  | SymMult s1 s2 => (substituteInt s1 mappings) * (substituteInt s2 mappings)
   | Constant n => n
+  end.
+
+Fixpoint substituteBool (sb: SBoolExp) (mappings: concreteState) : bool :=
+  match sb with
+  | SBTrue => true 
+  | SBFalse => false 
+  | SBnot b => negb (substituteBool b mappings)
+  | SBge0 se => 0 <=? (substituteInt se mappings)
   end.
 
 (** This function is used to evaluate an integer expression, similar to Imp but taking
     into account our symbolic notion of program state. *)
-Fixpoint inteval (ie: IntExp) (s: state) (mappings:  concreteState) : Z :=
+Fixpoint inteval (ie: IntExp) (mappings: concreteState) : Z :=
   match ie with 
   | IntLit n => n
-  | IntAdd n1 n2 => (inteval n1 s mappings) + (inteval n2 s mappings)
-  | IntSub n1 n2 => (inteval n1 s mappings) - (inteval n2 s mappings)
-  | IntMult n1 n2 => (inteval n1 s mappings) * (inteval n2 s mappings)
-  | IntId x => substitute (s x) mappings
+  | IntAdd n1 n2 => (inteval n1 mappings) + (inteval n2 mappings)
+  | IntSub n1 n2 => (inteval n1 mappings) - (inteval n2 mappings)
+  | IntMult n1 n2 => (inteval n1 mappings) * (inteval n2 mappings)
+  | IntId x => mappings x
 end.
 
 
@@ -94,22 +108,17 @@ end.
     into account our notion of program state. *)
 Fixpoint beval (b : BoolExp) (mappings: concreteState) : bool :=
   match b with
-  | BTrue   => true
+  | BTrue  => true
   | BFalse => false
   | Bnot b => negb (beval b mappings)
-  | Bge0 n => 0 <=? substitute n mappings
+  | Bge0 n => 0 <=? inteval n mappings
   end.
 
 (** This function is used to evaluate a path condition given a concrete state. *)
-Fixpoint eval_pc (pc: PathCond) (mappings: concreteState ) : bool :=
+Fixpoint eval_pc (pc: PathCond) (mappings: concreteState) : bool :=
   match pc with 
   | none => true
-  | Pand be p => match be with
-    | BTrue => eval_pc p mappings
-    | BFalse => false
-    | Bge0 n => (0 <=? substitute n mappings) && eval_pc p mappings
-    | Bnot b => (negb (beval b mappings)) && eval_pc p mappings
-    end
+  | Pand be p => (substituteBool be mappings) && (eval_pc p mappings)
   end.
 
 
@@ -154,7 +163,7 @@ Compute eval_pc ex_pc SAT_assign_ex_1.
     sA >= 0
     is satisfiable by the map that takes sA to 1 and all other symbolic
     variables to 0. *)
-Definition ex_pc_2 := Pand BTrue (Pand (Bge0 sA) none).
+Definition ex_pc_2 := Pand BTrue (Pand (Bge0 (IntId A)) none).
 Definition SAT_assign_ex_2: concreteState := (A !-> 1; _ !-> 0).
 Compute eval_pc ex_pc SAT_assign_ex_2.
 Example ex_pc_sat_2 : SAT ex_pc_2.
@@ -359,13 +368,21 @@ Reserved Notation
 Open Scope com_scope. 
 
 (** Inspired by Imp's aeval. This will convert an IntExp into a SymbolicExp. *)
-Fixpoint makeSymbolic (s : state) (ie : IntExp) : SymbolicExp :=
+Fixpoint makeSymbolicInt (s : state) (ie : IntExp) : SymbolicExp :=
   match ie with
   | IntLit n => Constant n
-  | <{n1 + n2}> =>  SymAdd (makeSymbolic s n1) (makeSymbolic s n2)
-  | <{n1 - n2}> => SymSub (makeSymbolic s n1) (makeSymbolic s n2)
-  | <{n1 * n2}> =>  SymMult (makeSymbolic s n1) (makeSymbolic s n2)
+  | <{n1 + n2}> =>  SymAdd (makeSymbolicInt s n1) (makeSymbolicInt s n2)
+  | <{n1 - n2}> => SymSub (makeSymbolicInt s n1) (makeSymbolicInt s n2)
+  | <{n1 * n2}> =>  SymMult (makeSymbolicInt s n1) (makeSymbolicInt s n2)
   | IntId n => s n
+  end.
+
+Fixpoint makeSymbolicBool (s : state) (be : BoolExp) : SBoolExp :=
+  match be with
+  | BTrue => SBTrue
+  | BFalse => SBFalse
+  | Bnot b => SBnot (makeSymbolicBool s b)
+  | Bge0 ie => SBge0 (makeSymbolicInt s ie)
   end.
 
 (** The following relation is our representation of symbolic execution of a program.
@@ -385,7 +402,7 @@ Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
     extractPathCond node = pc ->
     (SAT pc) ->
     (findStatement prog n) = <{x := ie}> ->
-    (makeSymbolic st ie) = se ->
+    (makeSymbolicInt st ie) = se ->
     node_eval prog (Node (x !-> se ; st) pc (n+1)) tree' ->
     node_eval prog node (Tr node [tree'])
 
@@ -397,25 +414,27 @@ Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
     the condition is false. In these cases, we respectively add the condition and its
     negation to the path condition in the child nodes, and then update the index to
     point to the next executable instruction. *)
-  | E_IfSAT : forall prog node be then_body else_body st n pc tree1' tree2',
+  | E_IfSAT : forall prog node be sbe then_body else_body st n pc tree1' tree2',
     extractState node = st ->
     extractIndex node = n ->
     extractPathCond node = pc ->
     (findStatement prog n) = <{if be then then_body else else_body end}> ->
+    (makeSymbolicBool st be) = sbe ->
     (SAT pc) -> 
-    node_eval prog (Node st (Pand be pc) (n+1)) tree1' ->
-    node_eval prog (Node st (Pand (Bnot be) pc) (n + (length then_body))) tree2' ->
+    node_eval prog (Node st (Pand sbe pc) (n+1)) tree1' ->
+    node_eval prog (Node st (Pand (SBnot sbe) pc) (n + (length then_body))) tree2' ->
     node_eval prog node (Tr node [tree1' ; tree2'])
 
 (** If the boolean in the path condition is unsatisfiable, then we will only
     extend the execution tree along the 'else' branch. *)
-  | E_IfUnSAT : forall prog node be then_body else_body st n pc tree,
+  | E_IfUnSAT : forall prog node be sbe then_body else_body st n pc tree,
     extractState node = st ->
     extractIndex node = n ->
     extractPathCond node = pc ->
     (findStatement prog n) = <{if be then then_body else else_body end}> ->
-    (SAT (Pand (Bnot be) pc)) ->
-    node_eval prog (Node st (Pand (Bnot be) pc) (n + (length then_body))) tree ->
+    (makeSymbolicBool st be) = sbe ->
+    (SAT (Pand (SBnot sbe) pc)) ->
+    node_eval prog (Node st (Pand (SBnot sbe) pc) (n + (length then_body))) tree ->
     node_eval prog node (Tr node [tree])
 
 (** Go_To statements have no branching structure involved. There is just one child
@@ -435,26 +454,28 @@ Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
     next executable instruction is pointed to by separate indices in each case. We
     add the boolean condition to the branch that executes the loop body, and its
     negation to the branch that skips the loop. *)
-  | E_WhileSAT: forall prog node be body st n pc tree1' tree2',
+  | E_WhileSAT: forall prog node be sbe body st n pc tree1' tree2',
     extractState node = st ->
     extractIndex node = n ->
     extractPathCond node = pc ->
     (findStatement prog n) = <{while be do body end}> ->
+    (makeSymbolicBool st be) = sbe ->
     (SAT pc) ->
-    node_eval prog (Node st (Pand be pc) (n + 1)) tree1' ->
-    node_eval prog (Node st (Pand (Bnot be) pc) (n + (length body)+ 1)) tree2' ->
+    node_eval prog (Node st (Pand sbe pc) (n + 1)) tree1' ->
+    node_eval prog (Node st (Pand (SBnot sbe) pc) (n + (length body)+ 1)) tree2' ->
     node_eval prog node (Tr node [tree1' ; tree2'])
 
 (** If the path condition is unsatisfiable, we unconditionally skip the loop body,
     and just have one child node representing this case. This child node has an
     updated index and path condition. *)
-  | E_WhileUnSAT: forall prog node be body st n pc tree,
+  | E_WhileUnSAT: forall prog node be sbe body st n pc tree,
     extractState node = st ->
     extractIndex node = n ->
     extractPathCond node = pc ->
     (findStatement prog n) = <{while be do body end}> ->
-    (SAT (Pand (Bnot be) pc)) ->
-    node_eval prog (Node st (Pand (Bnot be) pc) (n + (length body) + 1)) tree ->
+    (makeSymbolicBool st be) = sbe ->
+    (SAT (Pand (SBnot sbe) pc)) ->
+    node_eval prog (Node st (Pand (SBnot sbe) pc) (n + (length body) + 1)) tree ->
     node_eval prog node (Tr node [tree])
 
 (** When the Finish statement is evaluated, it generates no child nodes. *)
@@ -624,7 +645,7 @@ Definition empty_st_2 := (A !-> sA; B !-> sB; C !-> sC; J !-> sJ; Z !-> sZ2; Y !
     we've implemented findStatement requires an exact match.  *)
 Axiom cond_after_1_iteration :
 findStatement prog_2 2 =
-<{if sY s- sJ >= 0
+<{if Y - J >= 0
   then [<{ Z := Z * X }>;
         <{ Y := Y - J }>;
         <{ go_to S(S(O)) }>;
@@ -647,8 +668,8 @@ Example prog_2_eval :
                 Tr (Node (Y !-> <{sY s- sJ}>; Z !-> <{sZ2 s* sX}>; J !-> (Constant 1) ;
                    Z !-> (Constant 1) ; empty_st_2) (Pand (Bge0 Y) none) 2) [
                   Tr (Node (Y !-> <{sY s- sJ}>; Z !-> <{sZ2 s* sX}>;J !-> (Constant 1) ;
-                      Z !-> (Constant 1) ; empty_st_2) (Pand <{ ~ sY s- sJ >= 0 }>
-                     (Pand <{ sY >= 0 }> none)) 6) nil
+                      Z !-> (Constant 1) ; empty_st_2) (Pand <{ ~ Y - J >= 0 }>
+                     (Pand <{ Y >= 0 }> none)) 6) nil
           ]]]];
           Tr (Node (J !-> (Constant 1) ; Z !-> (Constant 1) ; empty_st_2)
              (Pand (Bnot  (Bge0 Y)) none) 6) nil
@@ -665,7 +686,7 @@ Proof.
   try reflexivity.
   unfold SAT. exists SAT_assign_prog_2_true_branch. simpl. reflexivity. 
   (* if Y >= 0. This is true for the first iteration. *)
-  apply E_IfSAT with (be := Bge0 sY) (then_body := [<{Z := Z * X }>;
+  apply E_IfSAT with (be := Bge0 Y) (then_body := [<{Z := Z * X }>;
                                                     <{Y := Y - J}>;
                                                     Go_To 2;
                                                     Finish])
@@ -677,26 +698,26 @@ Proof.
   (* Z := Z * X  *)
   apply E_Assign with (x := Z) (ie := <{Z * X}>) (se := <{sZ2 s* sX}>)
                       (st := J !-> (Constant 1); Z !-> (Constant 1) ; empty_st_2)
-                      (n := S (S (S O))) (pc := Pand <{ sY >= 0 }> none);
+                      (n := S (S (S O))) (pc := Pand <{ Y >= 0 }> none);
   try reflexivity.
   unfold SAT. exists SAT_assign_prog_2_true_branch. simpl. reflexivity. 
   (* Y := Y - J  *)
   apply E_Assign with (x := Y) (ie := <{Y - J}>) (se := <{sY s- sJ}>)
                       (st := Z !-> <{sZ2 s* sX}>; J !-> (Constant 1);
                       Z !-> (Constant 1) ; empty_st_2) (n := S (S (S (S O))))
-                      (pc := Pand <{ sY >= 0 }> none);
+                      (pc := Pand <{ Y >= 0 }> none);
   try reflexivity.
   unfold SAT. exists SAT_assign_prog_2_true_branch. simpl. reflexivity.
   (* Go_To 2. Jump back up to if statement *)
   apply E_GoTo with (i := S (S O)) (st := Y !-> <{sY s- sJ}>; Z !-> <{sZ2 s* sX}>; 
                     J !-> (Constant 1); Z !-> (Constant 1) ; empty_st_2) 
-                    (n := S (S (S (S (S O))))) (pc := Pand <{ sY >= 0 }> none);
+                    (n := S (S (S (S (S O))))) (pc := Pand <{ Y >= 0 }> none);
   try reflexivity.
   unfold SAT. exists SAT_assign_prog_2_true_branch. simpl. reflexivity.
   (* If Y >= 0. This is not true anymore. Have to use the above axiom for this case,
      since now Y has been updated to be the symbol sY - sJ, but the condition is only
      checking sY >=0. *)
-  apply E_IfUnSAT with (be := Bge0 (SymSub sY sJ))
+  apply E_IfUnSAT with (be := Bge0 <{Y}>)
                        (then_body := [<{Z := Z * X }>;
                                       <{Y := Y - J}>;
                                       Go_To 2;
@@ -704,9 +725,8 @@ Proof.
                         (else_body := [Finish]) (st := Y !-> <{sY s- sJ}>;
                         Z !-> <{sZ2 s* sX}>; J !-> (Constant 1);
                         Z !-> (Constant 1) ; empty_st_2) 
-  (n := S(S O)) (pc := Pand <{ sY >= 0 }> none);
-  try reflexivity. 
-  apply cond_after_1_iteration. exists SAT_assign_prog_2_true_branch. simpl. reflexivity.
+  (n := S(S O)) (pc := Pand <{ Y >= 0 }> none);
+  try reflexivity. exists SAT_assign_prog_2_true_branch. simpl. reflexivity.
   (* Finish. This is the end of the road for the original true branch. *)  
   apply E_Finish with (st := Y !-> <{sY s- sJ}>; Z !-> <{sZ2 s* sX}>;
                       J !-> (Constant 1); Z !-> (Constant 1) ; empty_st_2) 
@@ -1175,8 +1195,8 @@ Definition final_symbolic_node_ex_2_true_branch :=
 
 (** Concreteize the state of the last symbolic node on the true branch. *)
 Definition final_symbolic_node_state_sub :=
-  ( Y !-> substitute <{sY s- sJ}> SAT_assign_prog_2_true_branch;
-  Z !-> substitute <{sZ2 s* sX}> SAT_assign_prog_2_true_branch ;
+  ( Y !-> substituteInt <{sY s- sJ}> SAT_assign_prog_2_true_branch;
+  Z !-> substituteInt <{sZ2 s* sX}> SAT_assign_prog_2_true_branch ;
   J !-> 1 ; Z !-> 1; start_state_2).
 
 (* Function used to show equivalence of two states for example 2.*)
@@ -1210,8 +1230,8 @@ Definition final_concrete_node_state_false :=
   (J !-> 1 ; Z !-> 1 ; start_state_2_false_branch). 
 
 Definition final_symbolic_node_state_false := 
-  (J !-> substitute(Constant 1) SAT_assign_prog_2_false_branch;
-  Z !-> substitute (Constant 1) SAT_assign_prog_2_true_branch ; 
+  (J !-> substituteInt(Constant 1) SAT_assign_prog_2_false_branch;
+  Z !-> substituteInt (Constant 1) SAT_assign_prog_2_true_branch ; 
   start_state_2_false_branch).
 
 (** - The inital state concrete state for conventional execution and the SAT
@@ -1334,8 +1354,8 @@ Definition final_symbolic_node_ex_3_true_branch :=
 
 (** Concreteize the state of the last symbolic node on the true branch. *)
 Definition final_symbolic_node_3_state_sub :=
-  (X !-> substitute <{A s- Constant 1}> SAT_assignment_3_1 ;
-  X !-> substitute A SAT_assignment_3_1; _ !-> 0).
+  (X !-> substituteInt <{A s- Constant 1}> SAT_assignment_3_1 ;
+  X !-> substituteInt A SAT_assignment_3_1; _ !-> 0).
 
 (** Function used to show equivalence of two states for example 1.*)
 Definition ex_3_states_equivalent (s1 s2 : concreteState) : bool :=
@@ -1364,7 +1384,7 @@ Qed.
  
 
 Definition final_symbolic_node_state_false_3 := 
-  (X !-> substitute A SAT_assignment_3_2; _ !-> 0).
+  (X !-> substituteInt A SAT_assignment_3_2; _ !-> 0).
 
 (** - The inital state concrete state for conventional execution and the SAT
       assignment for the symbolic exeuction of the false branch are the same.
