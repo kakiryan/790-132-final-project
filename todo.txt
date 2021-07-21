@@ -3,9 +3,17 @@ Things to do for project
 - Fix matching boolean expressions
   * Separate BoolExp used in programs from BoolExp used in path conditions
 
-- Factor out common hypotheses for eval relation (?)
 - Add depth to node_eval
 - See if the node_eval hypotheses can be simplified
 - Add notation for trees
 - Add notation for programs
 - Fix satisfiability hypothesis so we don't generate unsatisfiable nodes
+- Prove superset_SAT axiom
+- General proofs 
+- Potentially separate out into one file with all definitions and another with proofs
+- define variables all together
+
+Notation for:
+- Writing a program more cleanly; perhaps rewrite so we can do symbolic expressions the same just without 's', inside diff bracket
+- Nodes, PC
+- 
