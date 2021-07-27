@@ -338,12 +338,6 @@ Notation "x - y" := (IntSub x y)
   (in custom com at level 50, left associativity).
 Notation "x * y" := (IntMult x y)
   (in custom com at level 40, left associativity).
-Notation "x s+ y" := (SymAdd x y)
-  (in custom com at level 50, left associativity).
-Notation "x s- y" := (SymSub x y)
-  (in custom com at level 50, left associativity).
-Notation "x s* y" := (SymMult x y)
-  (in custom com at level 40, left associativity).
 Notation "'true'"  := true (at level 1).
 Notation "'true'"  := BTrue (in custom com at level 0).
 Notation "'false'"  := false (at level 1).
@@ -351,6 +345,29 @@ Notation "'false'"  := BFalse (in custom com at level 0).
 Notation "x >= 0" := (Bge0 x) (in custom com at level 70, no associativity).
 Notation "'~' b"  := (Bnot b)
   (in custom com at level 75, right associativity).
+
+Declare Custom Entry sym.
+
+Notation "<[ e ]>" := e (at level 0, e custom sym at level 99) : sym_scope.
+Notation "( x )" := x (in custom sym, x at level 99) : sym_scope.
+Notation "x" := x (in custom sym at level 0, x constr at level 0) : sym_scope.
+Notation "f x .. y" := (.. (f x) .. y)
+                  (in custom sym at level 0, only parsing,
+                  f constr at level 0, x constr at level 9,
+                  y constr at level 9) : sym_scope.
+Notation "x + y" := (SymAdd x y)
+  (in custom sym at level 50, left associativity).
+Notation "x - y" := (SymSub x y)
+  (in custom sym at level 50, left associativity).
+Notation "x * y" := (SymMult x y)
+  (in custom sym at level 40, left associativity).
+Notation "'true'"  := SBTrue (in custom sym at level 0).
+Notation "'false'"  := SBFalse (in custom sym at level 0).
+Notation "x >= 0" := (SBge0 x) (in custom sym at level 70, no associativity).
+Notation "'~' b"  := (SBnot b)
+  (in custom sym at level 75, right associativity).
+
+
 Notation "x := y" :=
          (Assignment x  y)
             (in custom com at level 0, x constr at level 0,
@@ -363,20 +380,18 @@ Notation "'while' b 'do' body 'end'" :=
          (While b body)
             (in custom com at level 89, b at level 99, body at level 99) : com_scope.
 Notation "'go_to' x" := (Go_To x) (in custom com at level 89, x at level 99) : com_scope.
-Reserved Notation
-         "st '=[' c ']=>' st'"
-         (at level 40, c custom com at level 99,
-          st constr, st' constr at next level).
 
-Open Scope com_scope. 
+
+Open Scope com_scope.
+Open Scope sym_scope.
 
 (** Inspired by Imp's aeval. This will convert an IntExp into a SymbolicExp. *)
 Fixpoint makeSymbolicInt (s : state) (ie : IntExp) : SymbolicExp :=
   match ie with
   | IntLit n => Constant n
-  | <{n1 + n2}> =>  SymAdd (makeSymbolicInt s n1) (makeSymbolicInt s n2)
-  | <{n1 - n2}> => SymSub (makeSymbolicInt s n1) (makeSymbolicInt s n2)
-  | <{n1 * n2}> =>  SymMult (makeSymbolicInt s n1) (makeSymbolicInt s n2)
+  | <{n1 + n2}> =>  <[(makeSymbolicInt s n1) + (makeSymbolicInt s n2)]>
+  | <{n1 - n2}> =>  <[(makeSymbolicInt s n1) - (makeSymbolicInt s n2)]>
+  | <{n1 * n2}> =>  <[(makeSymbolicInt s n1) * (makeSymbolicInt s n2)]>
   | IntId n => s n
   end.
 
@@ -384,8 +399,8 @@ Fixpoint makeSymbolicBool (s : state) (be : BoolExp) : SBoolExp :=
   match be with
   | BTrue => SBTrue
   | BFalse => SBFalse
-  | Bnot b => SBnot (makeSymbolicBool s b)
-  | Bge0 ie => SBge0 (makeSymbolicInt s ie)
+  | Bnot b => <[~ (makeSymbolicBool s b)]>
+  | Bge0 ie => <[(makeSymbolicInt s ie) >= 0]>
   end.
 
 (** The following relation is our representation of symbolic execution of a program.
@@ -417,27 +432,40 @@ Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
     the condition is false. In these cases, we respectively add the condition and its
     negation to the path condition in the child nodes, and then update the index to
     point to the next executable instruction. *)
-  | E_IfSAT : forall prog node be sbe then_body else_body st n pc tree1' tree2',
+  | E_IfBoth : forall prog node be sbe then_body else_body st n pc tree1' tree2',
     extractState node = st ->
     extractIndex node = n ->
     extractPathCond node = pc ->
     (findStatement prog n) = <{if be then then_body else else_body end}> ->
     (makeSymbolicBool st be) = sbe ->
-    (SAT pc) -> 
+    (SAT (sbe::pc)) ->
+    (SAT (<[~sbe]>::pc)) ->
     node_eval prog << st, sbe::pc,  (n+1)>> tree1' ->
-    node_eval prog << st, (SBnot sbe)::pc, (n + (length then_body))>> tree2' ->
+    node_eval prog << st, (<[~sbe]>)::pc, (n + (length then_body))>> tree2' ->
     node_eval prog node (Tr node [tree1' ; tree2'])
 
 (** If the boolean in the path condition is unsatisfiable, then we will only
     extend the execution tree along the 'else' branch. *)
-  | E_IfUnSAT : forall prog node be sbe then_body else_body st n pc tree,
+    | E_IfThen : forall prog node be sbe then_body else_body st n pc tree,
     extractState node = st ->
     extractIndex node = n ->
     extractPathCond node = pc ->
     (findStatement prog n) = <{if be then then_body else else_body end}> ->
     (makeSymbolicBool st be) = sbe ->
-    (SAT ((SBnot sbe)::pc)) ->
-    node_eval prog << st, (SBnot sbe):: pc, (n + (length then_body))>> tree ->
+    (SAT ( sbe ::pc)) ->
+    node_eval prog << st, sbe:: pc, (n + 1)>> tree ->
+    node_eval prog node (Tr node [tree])
+
+(** If the boolean in the path condition is unsatisfiable, then we will only
+    extend the execution tree along the 'else' branch. *)
+  | E_IfElse : forall prog node be sbe then_body else_body st n pc tree,
+    extractState node = st ->
+    extractIndex node = n ->
+    extractPathCond node = pc ->
+    (findStatement prog n) = <{if be then then_body else else_body end}> ->
+    (makeSymbolicBool st be) = sbe ->
+    (SAT ( <[~sbe]> ::pc)) ->
+    node_eval prog << st, (<[~sbe]>):: pc, (n + (length then_body))>> tree ->
     node_eval prog node (Tr node [tree])
 
 (** Go_To statements have no branching structure involved. There is just one child
@@ -457,28 +485,42 @@ Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
     next executable instruction is pointed to by separate indices in each case. We
     add the boolean condition to the branch that executes the loop body, and its
     negation to the branch that skips the loop. *)
-  | E_WhileSAT: forall prog node be sbe body st n pc tree1' tree2',
+  | E_WhileBoth: forall prog node be sbe body st n pc tree1' tree2',
     extractState node = st ->
     extractIndex node = n ->
     extractPathCond node = pc ->
     (findStatement prog n) = <{while be do body end}> ->
     (makeSymbolicBool st be) = sbe ->
-    (SAT pc) ->
+    (SAT (sbe:: pc)) ->
+    (SAT (<[~sbe]>:: pc)) ->
     node_eval prog << st,  sbe::pc, (n + 1) >> tree1' ->
-    node_eval prog <<  st,  ((SBnot sbe):: pc), (n + (length body)+ 1)>> tree2' ->
+    node_eval prog <<  st,  (<[~sbe]>:: pc), (n + (length body)+ 1)>> tree2' ->
     node_eval prog node (Tr node [tree1' ; tree2'])
+
+  (** If the path condition is unsatisfiable, we unconditionally skip the loop body,
+  and just have one child node representing this case. This child node has an
+  updated index and path condition. *)
+  | E_WhileBody: forall prog node be sbe body st n pc tree,
+    extractState node = st ->
+    extractIndex node = n ->
+    extractPathCond node = pc ->
+    (findStatement prog n) = <{while be do body end}> ->
+    (makeSymbolicBool st be) = sbe ->
+    (SAT (sbe:: pc)) ->
+    node_eval prog << st, (sbe:: pc), (n + 1)>> tree ->
+    node_eval prog node (Tr node [tree])
 
 (** If the path condition is unsatisfiable, we unconditionally skip the loop body,
     and just have one child node representing this case. This child node has an
     updated index and path condition. *)
-  | E_WhileUnSAT: forall prog node be sbe body st n pc tree,
+  | E_WhileSkip: forall prog node be sbe body st n pc tree,
     extractState node = st ->
     extractIndex node = n ->
     extractPathCond node = pc ->
     (findStatement prog n) = <{while be do body end}> ->
     (makeSymbolicBool st be) = sbe ->
-    (SAT ((SBnot sbe):: pc)) ->
-    node_eval prog << st, ((SBnot sbe):: pc), (n + (length body) + 1)>> tree ->
+    (SAT (<[~sbe]>:: pc)) ->
+    node_eval prog << st, (<[~sbe]>:: pc), (n + (length body) + 1)>> tree ->
     node_eval prog node (Tr node [tree])
 
 (** When the Finish statement is evaluated, it generates no child nodes. *)
@@ -513,16 +555,24 @@ Proof.
   intros. induction H. 
   (* E_Assign *)
   - simpl in IHnode_eval. rewrite H1. apply IHnode_eval. 
-  (* E_IFSat *)
-  - simpl in IHnode_eval1. inversion H1. rewrite H1. apply H4. 
-  (* E_IFUnSAT *)
-    - simpl in IHnode_eval. rewrite H1. apply superset_SAT in IHnode_eval.
-      apply IHnode_eval.  
+  (* E_IFBoth *)
+  - simpl in IHnode_eval1. inversion H1. rewrite H1.
+    apply superset_SAT in H4. apply H4.
+  (* E_IFThen *)
+  - simpl in IHnode_eval. rewrite H1. apply superset_SAT in IHnode_eval.
+  apply IHnode_eval.  
+  (* E_IFElse *)
+  - simpl in IHnode_eval. rewrite H1. apply superset_SAT in IHnode_eval.
+    apply IHnode_eval.  
   (* E_GoTo *)
   - simpl in IHnode_eval. rewrite H1. apply IHnode_eval.
-  (* E_WhileSAT *)
-  - simpl in IHnode_eval1. inversion H1. rewrite H1. apply H4. 
-  (* E_WhileUnSAT *)
+  (* E_WhileBoth *)
+  - simpl in IHnode_eval1. inversion H1. rewrite H1.
+    apply superset_SAT in H4. apply H4.
+  (* E_WhileBody *)
+  - simpl in IHnode_eval. rewrite H1. apply superset_SAT in IHnode_eval.
+  apply IHnode_eval.
+  (* E_WhileSkip *)
   - simpl in IHnode_eval. rewrite H1. apply superset_SAT in IHnode_eval.
     apply IHnode_eval. 
   (* E_Finish *)
@@ -546,29 +596,29 @@ Definition prog_1 := [<{X := A + B}>;
 Example prog_1_eval :
   node_eval prog_1 <<empty_st, nil, 0>>
     (Tr  << empty_st, nil, 0>> [(
-      Tr <<(X !-> <{sA s+ sB}> ; empty_st), nil, 1>> [(
-        Tr <<(Y !-> <{sB s+ sC}> ; X !-> <{sA s+ sB}> ; empty_st), nil, 2>> [(
-          Tr <<(Z !-> <{(sA s+ sB) s+ (sB s+ sC) s- sB}> ; Y !-> <{sB s+ sC}> ;
-                    X !-> <{sA s+ sB}> ; empty_st), nil, 3>> nil
+      Tr <<(X !-> <[sA + sB]> ; empty_st), nil, 1>> [(
+        Tr <<(Y !-> <[sB + sC]> ; X !-> <[sA + sB]> ; empty_st), nil, 2>> [(
+          Tr <<(Z !-> <[(sA + sB) + (sB + sC) - sB]> ; Y !-> <[sB + sC]> ;
+                    X !-> <[sA + sB]> ; empty_st), nil, 3>> nil
     )])])]).
 Proof.
   (* X := A + B *)
-  apply E_Assign with (x := X) (ie := <{A + B}>) (se := <{A s+ B}>)
+  apply E_Assign with (x := X) (ie := <{A + B}>) (se := <[A + B]>)
                       (st := empty_st) (n := O) (pc := nil); try reflexivity.
     unfold SAT. exists SAT_assign_ex_1. simpl. reflexivity. 
   (* Y := B + C *)
-  apply E_Assign with (x := Y) (ie := <{B + C}>) (se := <{B s+ C}>)
-                      (st := X !-> <{ A s+ B }>; empty_st)
+  apply E_Assign with (x := Y) (ie := <{B + C}>) (se := <[B + C]>)
+                      (st := X !-> <[A + B]>; empty_st)
                       (n := S O) (pc := nil); try reflexivity.
     unfold SAT. exists SAT_assign_ex_1. simpl. reflexivity.
  (* Z := X + Y  - B *)  
   apply E_Assign with (x := Z ) (ie := <{X + Y - B}>)
-                      (se := <{(sA s+ sB) s+ (sB s+ sC) s- sB}>)
-                      (st := Y !-> <{sB s+ sC}> ; X !-> <{sA s+ sB}> ; empty_st)
+                      (se := <[(sA + sB) + (sB + sC) - sB]>)
+                      (st := Y !-> <[sB + sC]> ; X !-> <[sA + sB]> ; empty_st)
                       (n := S (S O)) (pc := nil); try reflexivity.
     unfold SAT. exists SAT_assign_ex_1. simpl. reflexivity.
-  apply E_Finish with (st := Z !-> <{(sA s+ sB) s+ (sB s+ sC) s- sB}> ;
-                             Y !-> <{sB s+ sC}> ; X !-> <{sA s+ sB}> ; empty_st)
+  apply E_Finish with (st := Z !-> <[(sA + sB) + (sB + sC) - sB]> ;
+                             Y !-> <[sB + sC]> ; X !-> <[sA + sB]> ; empty_st)
                       (n := S (S (S O))) (pc := nil); try reflexivity.
     unfold SAT. exists SAT_assign_ex_1. simpl. reflexivity.
 Qed.
@@ -577,10 +627,10 @@ Qed.
     program, we will refer to it as tree_1. *)
 Definition tree_1 := 
     (Tr  << empty_st, nil, 0>> [(
-      Tr <<(X !-> <{sA s+ sB}> ; empty_st), nil, 1>> [(
-        Tr <<(Y !-> <{sB s+ sC}> ; X !-> <{sA s+ sB}> ; empty_st), nil, 2>> [(
-          Tr <<(Z !-> <{(sA s+ sB) s+ (sB s+ sC) s- sB}> ; Y !-> <{sB s+ sC}> ;
-                    X !-> <{sA s+ sB}> ; empty_st), nil, 3>> nil
+      Tr <<(X !-> <[sA + sB]> ; empty_st), nil, 1>> [(
+        Tr <<(Y !-> <[sB + sC]> ; X !-> <[sA + sB]> ; empty_st), nil, 2>> [(
+          Tr <<(Z !-> <[(sA + sB) + (sB + sC) - sB]> ; Y !-> <[sB + sC]> ;
+                    X !-> <[sA + sB]> ; empty_st), nil, 3>> nil
     )])])]).
 
 (** Property 2 from the paper is that every leaf node is distinct, or in other words,
@@ -652,18 +702,18 @@ Example prog_2_eval :
         Tr <<(J !-> (Constant 1) ; Z !-> (Constant 1) ; empty_st_2), nil, 2>> [
           Tr <<(J !-> (Constant 1) ; Z !-> (Constant 1) ; empty_st_2),
               [SBge0 sY], 3>> [
-            Tr <<(Z !-> <{sZ2 s* sX}>; J !-> (Constant 1) ; Z !-> (Constant 1) ;
+            Tr <<(Z !-> <[sZ2 * sX]>; J !-> (Constant 1) ; Z !-> (Constant 1) ;
                 empty_st_2), [SBge0 sY], 4>> [
-              Tr <<(Y !-> <{sY s- sJ}>; Z !-> <{sZ2 s* sX}>; J !-> (Constant 1) ;
-                  Z !-> (Constant 1) ; empty_st_2), [SBge0 sY], 5>> [
-                Tr <<(Y !-> <{sY s- sJ}>; Z !-> <{sZ2 s* sX}>; J !-> (Constant 1) ;
-                   Z !-> (Constant 1) ; empty_st_2), [SBge0 sY], 2>> [
-                  Tr <<(Y !-> <{sY s- sJ}>; Z !-> <{sZ2 s* sX}>;J !-> (Constant 1) ;
-                      Z !-> (Constant 1) ; empty_st_2), [(SBnot (SBge0 <{sY s- sJ}>));
-                      (SBge0 sY)], 6>> nil
+              Tr <<(Y !-> <[sY - sJ]>; Z !-> <[sZ2 * sX]>; J !-> (Constant 1) ;
+                  Z !-> (Constant 1) ; empty_st_2), [<[sY >= 0]>], 5>> [
+                Tr <<(Y !-> <[sY - sJ]>; Z !-> <[sZ2 * sX]>; J !-> (Constant 1) ;
+                   Z !-> (Constant 1) ; empty_st_2), [<[sY >= 0]>], 2>> [
+                  Tr <<(Y !-> <[sY - sJ]>; Z !-> <[sZ2 * sX]>;J !-> (Constant 1) ;
+                      Z !-> (Constant 1) ; empty_st_2), [<[~(sY - sJ >= 0)]>;
+                      <[sY >= 0]>], 6>> nil
           ]]]];
           Tr << J !-> (Constant 1) ; Z !-> (Constant 1) ; empty_st_2,
-             [ (SBnot  (SBge0 sY))], 6>> nil
+             [<[~(sY >= 0)]>], 6>> nil
     ]]]).
 Proof.
   (* Z := 1 *)
@@ -677,7 +727,7 @@ Proof.
   try reflexivity.
   unfold SAT. exists SAT_assign_prog_2_true_branch. simpl. reflexivity. 
   (* if Y >= 0. This is true for the first iteration. *)
-  apply E_IfSAT with (be := Bge0 Y) (sbe := SBge0 sY) (then_body := [<{Z := Z * X }>;
+  apply E_IfBoth with (be := Bge0 Y) (sbe := SBge0 sY) (then_body := [<{Z := Z * X }>;
                                                     <{Y := Y - J}>;
                                                     Go_To 2;
                                                     Finish])
@@ -686,48 +736,49 @@ Proof.
                       (n := S (S O)) (pc := nil);
   try reflexivity.
   unfold SAT. exists SAT_assign_prog_2_true_branch. simpl. reflexivity.
+  unfold SAT. exists SAT_assign_prog_2_false_branch. simpl. reflexivity. 
   (* Z := Z * X  *)
-  apply E_Assign with (x := Z) (ie := <{Z * X}>) (se := <{sZ2 s* sX}>)
+  apply E_Assign with (x := Z) (ie := <{Z * X}>) (se := <[sZ2 * sX]>)
                       (st := J !-> (Constant 1); Z !-> (Constant 1) ; empty_st_2)
-                      (n := S (S (S O))) (pc := [SBge0 sY]);
+                      (n := S (S (S O))) (pc := [<[sY >= 0]>]);
   try reflexivity.
   unfold SAT. exists SAT_assign_prog_2_true_branch. simpl. reflexivity. 
   (* Y := Y - J  *)
-  apply E_Assign with (x := Y) (ie := <{Y - J}>) (se := <{sY s- sJ}>)
-                      (st := Z !-> <{sZ2 s* sX}>; J !-> (Constant 1);
+  apply E_Assign with (x := Y) (ie := <{Y - J}>) (se := <[sY - sJ]>)
+                      (st := Z !-> <[sZ2 * sX]>; J !-> (Constant 1);
                       Z !-> (Constant 1) ; empty_st_2) (n := S (S (S (S O))))
-                      (pc := [SBge0 sY]);
+                      (pc := [<[sY >= 0]>]);
   try reflexivity.
   unfold SAT. exists SAT_assign_prog_2_true_branch. simpl. reflexivity.
   (* Go_To 2. Jump back up to if statement *)
-  apply E_GoTo with (i := S (S O)) (st := Y !-> <{sY s- sJ}>; Z !-> <{sZ2 s* sX}>; 
+  apply E_GoTo with (i := S (S O)) (st := Y !-> <[sY - sJ]>; Z !-> <[sZ2 * sX]>; 
                     J !-> (Constant 1); Z !-> (Constant 1) ; empty_st_2) 
-                    (n := S (S (S (S (S O))))) (pc := [SBge0 sY]);
+                    (n := S (S (S (S (S O))))) (pc := [<[sY >= 0]>]);
   try reflexivity.
   unfold SAT. exists SAT_assign_prog_2_true_branch. simpl. reflexivity.
   (* If Y >= 0. This is not true anymore. Have to use the above axiom for this case,
      since now Y has been updated to be the symbol sY - sJ, but the condition is only
      checking sY >=0. *)
-  apply E_IfUnSAT with (be := Bge0 <{Y}>) (sbe := SBge0 (<{sY s- sJ}>))
+  apply E_IfElse with (be := <{Y >= 0}>) (sbe := <[(sY - sJ) >= 0]>)
                        (then_body := [<{Z := Z * X }>;
                                       <{Y := Y - J}>;
                                       Go_To 2;
                                       Finish])
-                        (else_body := [Finish]) (st := Y !-> <{sY s- sJ}>;
-                        Z !-> <{sZ2 s* sX}>; J !-> (Constant 1);
+                        (else_body := [Finish]) (st := Y !-> <[sY - sJ]>;
+                        Z !-> <[sZ2 * sX]>; J !-> (Constant 1);
                         Z !-> (Constant 1) ; empty_st_2) 
-  (n := S(S O)) (pc := [SBge0 sY]);
+  (n := S(S O)) (pc := [<[sY >= 0]>]);
   try reflexivity. exists SAT_assign_prog_2_true_branch. simpl. reflexivity.
   (* Finish. This is the end of the road for the original true branch. *)  
-  apply E_Finish with (st := Y !-> <{sY s- sJ}>; Z !-> <{sZ2 s* sX}>;
+  apply E_Finish with (st := Y !-> <[sY - sJ]>; Z !-> <[sZ2 * sX]>;
                       J !-> (Constant 1); Z !-> (Constant 1) ; empty_st_2) 
                       (n := 6%nat)
-                      (pc := [(SBnot (SBge0 <{sY s- sJ}>)); (SBge0 sY)]); 
+                      (pc := [<[~((sY - sJ) >= 0)]>; <[sY >= 0]>]); 
   try reflexivity.
   exists SAT_assign_prog_2_true_branch. simpl. reflexivity.
   (* Finish. This is the end of the road for the original else branch. *)  
   apply E_Finish with (st := J !-> (Constant 1); Z !-> (Constant 1) ; empty_st_2) 
-                      (n := 6%nat) (pc := [(SBnot (SBge0 sY))]);
+                      (n := 6%nat) (pc := [<[~(sY >= 0)]>]);
   try reflexivity.
   exists SAT_assign_prog_2_false_branch. simpl. reflexivity.
 Qed.
