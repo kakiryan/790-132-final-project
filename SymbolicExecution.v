@@ -4,6 +4,7 @@ Open Scope Z_scope.
 Open Scope list_scope.
 From LF Require Import Maps.
 From Coq Require Import Lists.List.
+From Coq Require Import Bool.Bool.
 Import ListNotations.
 
 (** Link to our repo: 
@@ -298,8 +299,8 @@ Fixpoint findStatement (prog : Program) (i : nat) : Statement :=
       | Assignment x a => findStatement t i'
       (* For If statements, we need to recursively flatten the structure
       within the 'then' and 'else' blocks. *)
-      | If b th e => match leb (progLength th MAX_PROG_LENGTH) i' with
-         | true => match leb ((progLength th MAX_PROG_LENGTH) + 
+      | If b th e => match Nat.leb (progLength th MAX_PROG_LENGTH) i' with
+         | true => match Nat.leb ((progLength th MAX_PROG_LENGTH) + 
                               (progLength e MAX_PROG_LENGTH)) i' with
            | true => findStatement t (i' - (progLength th MAX_PROG_LENGTH) - 
                                       (progLength e MAX_PROG_LENGTH))
@@ -309,7 +310,7 @@ Fixpoint findStatement (prog : Program) (i : nat) : Statement :=
         end
       (* Similarly, for While statements, we must recursively flatten the
       structure within the loop body. *)
-      | While b body => match leb (progLength body MAX_PROG_LENGTH) i' with
+      | While b body => match Nat.leb (progLength body MAX_PROG_LENGTH) i' with
          | true => findStatement t (i' - (progLength body MAX_PROG_LENGTH))
          | false => findStatement body i'
         end
@@ -403,6 +404,9 @@ Fixpoint makeSymbolicBool (s : state) (be : BoolExp) : SBoolExp :=
   | Bge0 ie => <[(makeSymbolicInt s ie) >= 0]>
   end.
 
+Definition node_unpack (node: TreeNode)(st: state) (n: nat) (pc: PathCond) :=
+    extractState node = st /\ extractIndex node = n /\ extractPathCond node = pc.
+
 (** The following relation is our representation of symbolic execution of a program.
     It relates a given program, and a node corresponding to a particular statement,
     to a resultant execution tree. As defined here, the relation will generate 
@@ -414,11 +418,9 @@ Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
     path condition, the resultant ExecutionTree is a single node with an updated
     state to reflect the assingment operation. The index is incremented by one in
     the child node, since there is no branching happening at this step. *)
+
   | E_Assign : forall prog node x ie se st n pc tree',
-    extractState node = st ->
-    extractIndex node = n ->
-    extractPathCond node = pc ->
-    (SAT pc) ->
+    node_unpack node st n pc ->
     (findStatement prog n) = <{x := ie}> ->
     (makeSymbolicInt st ie) = se ->
     node_eval prog  <<(x !-> se ; st), pc, (n+1) >> tree' ->
@@ -433,9 +435,7 @@ Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
     negation to the path condition in the child nodes, and then update the index to
     point to the next executable instruction. *)
   | E_IfBoth : forall prog node be sbe then_body else_body st n pc tree1' tree2',
-    extractState node = st ->
-    extractIndex node = n ->
-    extractPathCond node = pc ->
+    node_unpack node st n pc ->
     (findStatement prog n) = <{if be then then_body else else_body end}> ->
     (makeSymbolicBool st be) = sbe ->
     (SAT (sbe::pc)) ->
@@ -447,9 +447,7 @@ Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
 (** If the boolean in the path condition is unsatisfiable, then we will only
     extend the execution tree along the 'else' branch. *)
     | E_IfThen : forall prog node be sbe then_body else_body st n pc tree,
-    extractState node = st ->
-    extractIndex node = n ->
-    extractPathCond node = pc ->
+    node_unpack node st n pc ->
     (findStatement prog n) = <{if be then then_body else else_body end}> ->
     (makeSymbolicBool st be) = sbe ->
     (SAT ( sbe ::pc)) ->
@@ -459,9 +457,7 @@ Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
 (** If the boolean in the path condition is unsatisfiable, then we will only
     extend the execution tree along the 'else' branch. *)
   | E_IfElse : forall prog node be sbe then_body else_body st n pc tree,
-    extractState node = st ->
-    extractIndex node = n ->
-    extractPathCond node = pc ->
+    node_unpack node st n pc ->
     (findStatement prog n) = <{if be then then_body else else_body end}> ->
     (makeSymbolicBool st be) = sbe ->
     (SAT ( <[~sbe]> ::pc)) ->
@@ -471,10 +467,7 @@ Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
 (** Go_To statements have no branching structure involved. There is just one child
     node, which has an index pointing to the statement specified by the Go_To. *)
   | E_GoTo: forall prog node i st n pc tree',
-    extractState node = st ->
-    extractIndex node = n ->
-    extractPathCond node = pc ->
-    (SAT pc) ->
+    node_unpack node st n pc ->
     (findStatement prog n) = <{go_to i}> ->
     node_eval prog (Node st pc i) tree' ->
     node_eval prog node (Tr node [tree'])
@@ -486,9 +479,7 @@ Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
     add the boolean condition to the branch that executes the loop body, and its
     negation to the branch that skips the loop. *)
   | E_WhileBoth: forall prog node be sbe body st n pc tree1' tree2',
-    extractState node = st ->
-    extractIndex node = n ->
-    extractPathCond node = pc ->
+    node_unpack node st n pc ->
     (findStatement prog n) = <{while be do body end}> ->
     (makeSymbolicBool st be) = sbe ->
     (SAT (sbe:: pc)) ->
@@ -501,9 +492,7 @@ Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
   and just have one child node representing this case. This child node has an
   updated index and path condition. *)
   | E_WhileBody: forall prog node be sbe body st n pc tree,
-    extractState node = st ->
-    extractIndex node = n ->
-    extractPathCond node = pc ->
+    node_unpack node st n pc ->
     (findStatement prog n) = <{while be do body end}> ->
     (makeSymbolicBool st be) = sbe ->
     (SAT (sbe:: pc)) ->
@@ -514,9 +503,7 @@ Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
     and just have one child node representing this case. This child node has an
     updated index and path condition. *)
   | E_WhileSkip: forall prog node be sbe body st n pc tree,
-    extractState node = st ->
-    extractIndex node = n ->
-    extractPathCond node = pc ->
+    node_unpack node st n pc ->
     (findStatement prog n) = <{while be do body end}> ->
     (makeSymbolicBool st be) = sbe ->
     (SAT (<[~sbe]>:: pc)) ->
@@ -525,18 +512,20 @@ Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
 
 (** When the Finish statement is evaluated, it generates no child nodes. *)
   | E_Finish: forall prog node st n pc,
-    extractState node = st ->
-    extractIndex node = n ->
-    extractPathCond node = pc ->
-    (SAT pc) ->
+    node_unpack node st n pc ->
+    SAT pc ->
     (findStatement prog n) = Finish ->
     node_eval prog node (Tr node []).
 
 (** This should be provable, but we'll skip it in the interest of time. It is stating
     that if a superset of a condition is satisfiable, then the condition itself is 
     satisfiable. *)
-Axiom superset_SAT : forall (p: PathCond) (sbe : SBoolExp),
+Theorem superset_SAT : forall (p: PathCond) (sbe : SBoolExp),
   SAT (sbe::p) -> SAT p.
+Proof. intros. destruct H. unfold SAT. exists x. simpl in H. destruct (eval_pc p x). 
+ - reflexivity.
+ - simpl in H. rewrite andb_comm in H. simpl in H. apply H.
+Qed. 
 
 (* ================== End: Definition Symbolic Execution Concepts. ==================*)
 
@@ -554,29 +543,29 @@ Theorem property_1 : forall (prog: Program) (node: TreeNode) (tr : ExecutionTree
 Proof. 
   intros. induction H. 
   (* E_Assign *)
-  - simpl in IHnode_eval. rewrite H1. apply IHnode_eval. 
+  - simpl in IHnode_eval. unfold node_unpack in H. destruct H as [H3 [H4  H5]]. rewrite H5. apply IHnode_eval. 
   (* E_IFBoth *)
-  - simpl in IHnode_eval1. inversion H1. rewrite H1.
-    apply superset_SAT in H4. apply H4.
+  - simpl in IHnode_eval1. unfold node_unpack in H. destruct H as [H6 [H7  H8]]. rewrite H8. 
+  apply superset_SAT in IHnode_eval1. apply IHnode_eval1.
   (* E_IFThen *)
-  - simpl in IHnode_eval. rewrite H1. apply superset_SAT in IHnode_eval.
+  - simpl in IHnode_eval. unfold node_unpack in H. destruct H as [H4 [H5  H6]]. rewrite H6. apply superset_SAT in IHnode_eval.
   apply IHnode_eval.  
   (* E_IFElse *)
-  - simpl in IHnode_eval. rewrite H1. apply superset_SAT in IHnode_eval.
+  - simpl in IHnode_eval. unfold node_unpack in H. destruct H as [H4 [H5  H6]]. rewrite H6. apply superset_SAT in IHnode_eval.
     apply IHnode_eval.  
   (* E_GoTo *)
-  - simpl in IHnode_eval. rewrite H1. apply IHnode_eval.
+  - simpl in IHnode_eval. unfold node_unpack in H. destruct H as [H2 [H3  H4]]. rewrite H4. apply IHnode_eval.
   (* E_WhileBoth *)
-  - simpl in IHnode_eval1. inversion H1. rewrite H1.
-    apply superset_SAT in H4. apply H4.
+  - simpl in IHnode_eval1. unfold node_unpack in H. destruct H as [H6 [H7  H8]]. rewrite H8. 
+  apply superset_SAT in IHnode_eval1. apply IHnode_eval1.  
   (* E_WhileBody *)
-  - simpl in IHnode_eval. rewrite H1. apply superset_SAT in IHnode_eval.
-  apply IHnode_eval.
+  - simpl in IHnode_eval. unfold node_unpack in H. destruct H as [H4 [H5  H6]]. rewrite H6. 
+  apply superset_SAT in IHnode_eval. apply IHnode_eval.
   (* E_WhileSkip *)
-  - simpl in IHnode_eval. rewrite H1. apply superset_SAT in IHnode_eval.
-    apply IHnode_eval. 
+  - simpl in IHnode_eval.  destruct H as [H4 [H5  H6]]. rewrite H6. 
+  apply superset_SAT in IHnode_eval. apply IHnode_eval.
   (* E_Finish *)
-  - destruct node. simpl. simpl in H1. rewrite H1. apply H2.
+  - unfold node_unpack in H.  destruct H as [H2 [H3  H4]]. rewrite H4. apply H0.
 Qed.
 
 (* ========================= End: Proof of Property 1. ================================*)

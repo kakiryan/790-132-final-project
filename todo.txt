@@ -1,14 +1,13 @@
 Things to do for project
 
 - Add depth to node_eval
-- Prove superset_SAT axiom
+	* Add more base case constructors (ex. Partially executed ?)
 - General proofs
 - Potentially separate out into one file with all definitions and another with proofs
 
 Notation wish list:
 - Replace S (S O) in proofs with %nat
 - Put state notation inside symbolic expression brackets
-- See if the node_eval hypotheses can be simplified
 
 Later:
 - Writing a program more cleanly
