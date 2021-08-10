@@ -2,10 +2,24 @@ From Coq Require Import Strings.String.
 Require Import ZArith.
 Open Scope Z_scope.
 Open Scope list_scope.
-From LF Require Import Maps.
+(** From LF Require Import Maps. *)
 From Coq Require Import Lists.List.
 From Coq Require Import Bool.Bool.
+From Coq Require Import FSets.FMapList.
+From Coq Require Import Structures.OrderedTypeEx.
 Import ListNotations.
+
+Open Scope string_scope.
+
+Module Import M := FMapList.Make(String_as_OT).
+
+Compute M.find "hi" (M.add "hi" "yeehaw" (M.empty _)).
+
+Notation "x '!->' v ';' m" := (M.add x v m)
+                              (at level 100, v at next level, right associativity).
+
+Definition m := ("hi" !-> "bye"; (M.empty _)).
+Check m.
 
 (** Link to our repo: 
 https://github.com/kakiryan/790-132-final-project *)
