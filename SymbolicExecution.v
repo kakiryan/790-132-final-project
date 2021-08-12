@@ -5,21 +5,10 @@ Open Scope list_scope.
 (** From LF Require Import Maps. *)
 From Coq Require Import Lists.List.
 From Coq Require Import Bool.Bool.
-From Coq Require Import FSets.FMapList.
 From Coq Require Import Structures.OrderedTypeEx.
 Import ListNotations.
 
 Open Scope string_scope.
-
-Module Import M := FMapList.Make(String_as_OT).
-
-Compute M.find "hi" (M.add "hi" "yeehaw" (M.empty _)).
-
-Notation "x '!->' v ';' m" := (M.add x v m)
-                              (at level 100, v at next level, right associativity).
-
-Definition m := ("hi" !-> "bye"; (M.empty _)).
-Check m.
 
 (** Link to our repo: 
 https://github.com/kakiryan/790-132-final-project *)
@@ -83,8 +72,26 @@ Inductive SBoolExp : Type :=
 
 (** We represent a symbolic program state as a total map of symbolic expressions
     and the concrete state is a total map of Integers. *)
-Definition state := total_map SymbolicExp.
-Definition concreteState := total_map Z.
+Definition state := list (string * SymbolicExp).
+Definition concreteState := list (string * Z).
+
+(** Determine whether a given symbolic state is empty. *)
+Fixpoint isEmpty (s : state) : bool :=
+  match s with
+  | nil => true 
+  | (k, v) :: s' =>
+    match v with
+    | Symbol _ => isEmpty s'
+    | _ => false
+    end 
+  end.
+
+Fixpoint applyState (s : state) (x : string) : SymbolicExp :=
+  match s with
+  | nil => Constant 0
+  | (k, v) :: s' =>
+    if (string_dec k x) then v else (applyState s' x)
+  end.
 
 (** A path condition is a list of boolean expressions connected by conjunction. *)
 Definition PathCond  := list SBoolExp.
@@ -93,7 +100,7 @@ Definition PathCond  := list SBoolExp.
     a concrete state. *)
 Fixpoint substituteInt (se: SymbolicExp) (mappings: concreteState): Z  :=
   match se with
-  | Symbol s => mappings s
+  | Symbol s => M.find s mappings
   | SymAdd s1 s2 => (substituteInt s1 mappings) + (substituteInt s2 mappings)
   | SymSub s1 s2 => (substituteInt s1 mappings) - (substituteInt s2 mappings)
   | SymMult s1 s2 => (substituteInt s1 mappings) * (substituteInt s2 mappings)
