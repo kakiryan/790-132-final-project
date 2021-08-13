@@ -93,6 +93,13 @@ Fixpoint applyState (s : state) (x : string) : SymbolicExp :=
     if (string_dec k x) then v else (applyState s' x)
   end.
 
+Fixpoint applyCState (s : concreteState) (x : string) : Z :=
+  match s with
+  | nil => 0
+  | (k, v) :: s' =>
+    if (string_dec k x) then v else (applyCState s' x)
+  end.
+
 (** A path condition is a list of boolean expressions connected by conjunction. *)
 Definition PathCond  := list SBoolExp.
             
@@ -100,7 +107,7 @@ Definition PathCond  := list SBoolExp.
     a concrete state. *)
 Fixpoint substituteInt (se: SymbolicExp) (mappings: concreteState): Z  :=
   match se with
-  | Symbol s => M.find s mappings
+  | Symbol s => applyCState mappings s
   | SymAdd s1 s2 => (substituteInt s1 mappings) + (substituteInt s2 mappings)
   | SymSub s1 s2 => (substituteInt s1 mappings) - (substituteInt s2 mappings)
   | SymMult s1 s2 => (substituteInt s1 mappings) * (substituteInt s2 mappings)
@@ -123,7 +130,7 @@ Fixpoint inteval (ie: IntExp) (mappings: concreteState) : Z :=
   | IntAdd n1 n2 => (inteval n1 mappings) + (inteval n2 mappings)
   | IntSub n1 n2 => (inteval n1 mappings) - (inteval n2 mappings)
   | IntMult n1 n2 => (inteval n1 mappings) * (inteval n2 mappings)
-  | IntId x => mappings x
+  | IntId x => applyCState mappings x
 end.
 
 
@@ -161,7 +168,7 @@ Definition Z: string := "Z".
 
 (** The empty state will map each parameter to its symbolic variable, and
     each local variable to the default value of 0. *)
-Definition empty_st := ( A !-> sA; B !-> sB; C !-> sC; _ !-> (Constant 0)).
+Definition empty_st := [(A, sA); (B, sB); (C, sC)].
 
 (** SAT is a property of any given path condition, saying that there exist concrete 
     values which make it satisfiable. *)
@@ -172,13 +179,13 @@ Definition SAT (pc: PathCond) := exists (cs: concreteState), eval_pc pc cs = tru
 Definition ex_pc :=  [SBTrue].
 Example ex_pc_sat : SAT ex_pc.
 Proof.
-  unfold SAT. exists ( _ !-> 0). simpl. reflexivity.
+  unfold SAT. exists nil. simpl. reflexivity.
 Qed.
 
 (** When we evaluate ex_pc with this trivial path condition, we get the boolean
     true. *)
 Definition SAT_assign_ex_1: concreteState := 
-  ( A !-> 1; B !-> 2; C!-> 1; X !-> 3; Y !-> 3; Z !-> 4; _ !-> 0).
+  [(A, 1); (B, 2); (C, 1); (X, 3); (Y, 3); (Z, 4)].
 Compute eval_pc ex_pc SAT_assign_ex_1.
 
 
