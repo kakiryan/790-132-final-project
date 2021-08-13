@@ -13,3 +13,10 @@ Later:
 - Writing a program more cleanly
   * Redefine program to match Imp model
 - Maybe move variable definitions around?
+
+
+8/13/21
+New strategy: 
+* Relating prog, old tree, leaf idx and new tree
+* want to rewrite node_eval with this new signature
+* Just finished get leaves fn to get a list of the leaves

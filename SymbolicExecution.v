@@ -194,12 +194,12 @@ Compute eval_pc ex_pc SAT_assign_ex_1.
     is satisfiable by the map that takes sA to 1 and all other symbolic
     variables to 0. *)
 Definition ex_pc_2 := [ SBTrue; (SBge0 (Symbol A))].
-Definition SAT_assign_ex_2: concreteState := (A !-> 1; _ !-> 0).
+(**Definition SAT_assign_ex_2: concreteState := (A !-> 1; _ !-> 0).
 Compute eval_pc ex_pc SAT_assign_ex_2.
 Example ex_pc_sat_2 : SAT ex_pc_2.
 Proof.
   unfold SAT. exists (A !-> 1; ( _ !-> 0)). simpl. reflexivity.
-Qed.
+Qed. *)
 
 (** A TreeNode represents one node of our symbolic execution tree.
     It contains a program state, path condition, and an index
@@ -421,7 +421,7 @@ Fixpoint makeSymbolicInt (s : state) (ie : IntExp) : SymbolicExp :=
   | <{n1 + n2}> =>  <[(makeSymbolicInt s n1) + (makeSymbolicInt s n2)]>
   | <{n1 - n2}> =>  <[(makeSymbolicInt s n1) - (makeSymbolicInt s n2)]>
   | <{n1 * n2}> =>  <[(makeSymbolicInt s n1) * (makeSymbolicInt s n2)]>
-  | IntId n => s n
+  | IntId n => applyState s n
   end.
 
 Fixpoint makeSymbolicBool (s : state) (be : BoolExp) : SBoolExp :=
@@ -435,13 +435,41 @@ Fixpoint makeSymbolicBool (s : state) (be : BoolExp) : SBoolExp :=
 Definition node_unpack (node: TreeNode)(st: state) (n: nat) (pc: PathCond) :=
     extractState node = st /\ extractIndex node = n /\ extractPathCond node = pc.
 
+Fixpoint getLeavesHelper (trees: list ExecutionTree) (gas: nat): list TreeNode :=
+  match gas with
+  | O => nil
+  | S gas' => 
+    match trees with
+    | nil => nil
+    | h :: t => 
+      match h with
+      | empty => getLeavesHelper t gas'
+      | Tr node children => 
+        match children with 
+        | nil => [node] ++ (getLeavesHelper t gas')
+        | h2 :: t2 => (getLeavesHelper t2 gas') ++ (getLeavesHelper t gas')
+        end
+      end
+    end
+  end. 
+
+
+Definition getLeaves (tr: ExecutionTree) : list TreeNode :=
+  getLeavesHelper [tr] 1000%nat.
+
 (** The following relation is our representation of symbolic execution of a program.
     It relates a given program, and a node corresponding to a particular statement,
     to a resultant execution tree. As defined here, the relation will generate 
     nodes for unsatisfiable path conditions (i.e. false path conditions) but
     will not progress execution past these nodes. *)
 
-Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
+Inductive node_eval: Program -> ExecutionTree -> nat -> Prop :=
+ | E_Empty: forall prog st,
+   (isEmpty st) = true -> 
+   node_eval prog (Tr <<st, nil, 0>> nil) 0.
+  
+   
+(**Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
 (** Given some node pointing to an assignment statement, with a given state and
     path condition, the resultant ExecutionTree is a single node with an updated
     state to reflect the assingment operation. The index is incremented by one in
@@ -543,7 +571,7 @@ Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
     node_unpack node st n pc ->
     SAT pc ->
     (findStatement prog n) = Finish ->
-    node_eval prog node (Tr node []).
+    node_eval prog node (Tr node []). *)
 
 (** This should be provable, but we'll skip it in the interest of time. It is stating
     that if a superset of a condition is satisfiable, then the condition itself is 
