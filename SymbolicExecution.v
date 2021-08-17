@@ -209,6 +209,8 @@ Inductive TreeNode : Type :=
 
 Notation "<< s , pc , i >>" := (Node s pc i).
 
+Definition empty_node := <<nil, nil, 0>>.
+
 (** Getters to extract information from the TreeNode object. *)
 
 Definition extractState (n : TreeNode) : state :=
@@ -230,7 +232,7 @@ Definition extractPathCond (n : TreeNode) : PathCond :=
     child trees. *)
 Inductive ExecutionTree : Type :=
   | empty
-  | Tr (n : TreeNode) (children : list ExecutionTree).
+  | Tr (n : TreeNode) (l : ExecutionTree) (r : ExecutionTree).
 
 (** Now we define a basic instruction in the Integer language. This differs from
     the Imp implementation in Imp.v, because we don't have a
@@ -435,27 +437,50 @@ Fixpoint makeSymbolicBool (s : state) (be : BoolExp) : SBoolExp :=
 Definition node_unpack (node: TreeNode)(st: state) (n: nat) (pc: PathCond) :=
     extractState node = st /\ extractIndex node = n /\ extractPathCond node = pc.
 
-Fixpoint getLeavesHelper (trees: list ExecutionTree) (gas: nat): list TreeNode :=
-  match gas with
-  | O => nil
-  | S gas' => 
-    match trees with
-    | nil => nil
-    | h :: t => 
-      match h with
-      | empty => getLeavesHelper t gas'
-      | Tr node children => 
-        match children with 
-        | nil => [node] ++ (getLeavesHelper t gas')
-        | h2 :: t2 => (getLeavesHelper t2 gas') ++ (getLeavesHelper t gas')
-        end
-      end
+Fixpoint treeSize (tree: ExecutionTree) : nat :=
+  match tree with
+  | empty => O 
+  | Tr node l r => S ((treeSize l) + (treeSize r))
+  end.
+
+(** Traversal strategy *)
+Fixpoint findNode (tree: ExecutionTree) (target: nat) : TreeNode :=
+  match tree with
+  | empty => empty_node
+  | Tr h l r =>
+    match target with
+    | O => h
+    | _ => if (Nat.leb target (treeSize l))
+           then findNode l target
+           else findNode r (target - (treeSize l) - 1)
+    end 
+  end.
+
+Fixpoint addNode (tree: ExecutionTree) (target: nat) (node: TreeNode) : ExecutionTree :=
+  match target with
+  | O => Tr node empty empty
+  | _ =>
+    match tree with
+    | empty => empty (* Bad *)
+    | Tr h l r => Tr h (addNode l target node) (addNode r (target - (treeSize l) - 1) node)
+    end 
+  end.
+
+Fixpoint isLeaf (tree: ExecutionTree) (target: nat) : bool := 
+  match target with
+  | O =>
+    match tree with 
+    | empty => false
+    | Tr h empty empty => true 
+    | _ => false
     end
-  end. 
+  | _ => 
+    match tree with 
+    | empty => false
+    | Tr h l r => orb (isLeaf l target) (isLeaf r (target - (treeSize l) - 1))
+    end
+  end.
 
-
-Definition getLeaves (tr: ExecutionTree) : list TreeNode :=
-  getLeavesHelper [tr] 1000%nat.
 
 (** The following relation is our representation of symbolic execution of a program.
     It relates a given program, and a node corresponding to a particular statement,
@@ -463,10 +488,28 @@ Definition getLeaves (tr: ExecutionTree) : list TreeNode :=
     nodes for unsatisfiable path conditions (i.e. false path conditions) but
     will not progress execution past these nodes. *)
 
-Inductive node_eval: Program -> ExecutionTree -> nat -> Prop :=
+Inductive node_eval: Program -> ExecutionTree -> nat -> ExecutionTree -> Prop :=
  | E_Empty: forall prog st,
    (isEmpty st) = true -> 
-   node_eval prog (Tr <<st, nil, 0>> nil) 0.
+   node_eval prog empty 0 (Tr <<st, nil, 0>> empty empty)
+  
+  | E_Assign : forall prog i node x ie se st n pc node' tree,
+    (isLeaf tree i) = true ->
+    node = findNode tree i ->
+    node_unpack node st n pc ->
+    (findStatement prog n) = <{x := ie}> ->
+    (makeSymbolicInt st ie) = se ->
+    node' = <<(x, se) :: st, pc, n+1>> ->
+    node_eval prog tree i (addNode tree i node').
+
+  (* | E_IfBoth :
+  | E_IfThen :
+  | E_IfElse :
+  | E_GoTo :
+  | E_WhileBoth :
+  | E_WhileBody :
+  | E_WhileSkip :
+  | E_Finish : *)
   
    
 (**Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
