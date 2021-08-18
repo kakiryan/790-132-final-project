@@ -451,18 +451,24 @@ Fixpoint findNode (tree: ExecutionTree) (target: nat) : TreeNode :=
     match target with
     | O => h
     | _ => if (Nat.leb target (treeSize l))
-           then findNode l target
+           then findNode l (target - 1)
            else findNode r (target - (treeSize l) - 1)
     end 
   end.
 
 Fixpoint addNode (tree: ExecutionTree) (target: nat) (node: TreeNode) : ExecutionTree :=
   match target with
-  | O => Tr node empty empty
+  | O => 
+    match tree with 
+    | empty => Tr node empty empty
+    | Tr h empty r => Tr h (Tr node empty empty) r
+    | Tr h l empty => Tr h l (Tr node empty empty)
+    | Tr h l r => tree
+    end
   | _ =>
     match tree with
     | empty => empty (* Bad *)
-    | Tr h l r => Tr h (addNode l target node) (addNode r (target - (treeSize l) - 1) node)
+    | Tr h l r => Tr h (addNode l (target - 1) node) (addNode r (target - (treeSize l) - 1) node)
     end 
   end.
 
@@ -477,7 +483,7 @@ Fixpoint isLeaf (tree: ExecutionTree) (target: nat) : bool :=
   | _ => 
     match tree with 
     | empty => false
-    | Tr h l r => orb (isLeaf l target) (isLeaf r (target - (treeSize l) - 1))
+    | Tr h l r => orb (isLeaf l (target - 1)) (isLeaf r (target - (treeSize l) - 1))
     end
   end.
 
@@ -500,121 +506,80 @@ Inductive node_eval: Program -> ExecutionTree -> nat -> ExecutionTree -> Prop :=
     (findStatement prog n) = <{x := ie}> ->
     (makeSymbolicInt st ie) = se ->
     node' = <<(x, se) :: st, pc, n+1>> ->
-    node_eval prog tree i (addNode tree i node').
+    node_eval prog tree i (addNode tree i node')
 
-  (* | E_IfBoth :
-  | E_IfThen :
-  | E_IfElse :
-  | E_GoTo :
-  | E_WhileBoth :
-  | E_WhileBody :
-  | E_WhileSkip :
-  | E_Finish : *)
-  
-   
-(**Inductive node_eval : Program -> TreeNode -> ExecutionTree -> Prop :=
-(** Given some node pointing to an assignment statement, with a given state and
-    path condition, the resultant ExecutionTree is a single node with an updated
-    state to reflect the assingment operation. The index is incremented by one in
-    the child node, since there is no branching happening at this step. *)
-
-  | E_Assign : forall prog node x ie se st n pc tree',
-    node_unpack node st n pc ->
-    (findStatement prog n) = <{x := ie}> ->
-    (makeSymbolicInt st ie) = se ->
-    node_eval prog  <<(x !-> se ; st), pc, (n+1) >> tree' ->
-    node_eval prog node (Tr node [tree'])
-
-(** Given some node pointing to an if statement, with a given state and path
-    condition, the resultant ExecutionTree depends on whether the boolean check is
-    satisfiable or not.
-
-    If so, it branches into two nodes: one where the condition is true and one where
-    the condition is false. In these cases, we respectively add the condition and its
-    negation to the path condition in the child nodes, and then update the index to
-    point to the next executable instruction. *)
-  | E_IfBoth : forall prog node be sbe then_body else_body st n pc tree1' tree2',
-    node_unpack node st n pc ->
+  | E_IfBoth : forall prog i node be sbe then_body else_body st n pc tree node1' node2',
+     (isLeaf tree i) = true ->
+     node = findNode tree i ->
+     node_unpack node st n pc ->
     (findStatement prog n) = <{if be then then_body else else_body end}> ->
     (makeSymbolicBool st be) = sbe ->
     (SAT (sbe::pc)) ->
     (SAT (<[~sbe]>::pc)) ->
-    node_eval prog << st, sbe::pc,  (n+1)>> tree1' ->
-    node_eval prog << st, (<[~sbe]>)::pc, (n + (length then_body))>> tree2' ->
-    node_eval prog node (Tr node [tree1' ; tree2'])
+    node1' = << st, sbe::pc,  (n+1)>> ->
+    node2' = << st, (<[~sbe]>)::pc, (n + (progLength then_body 1000%nat))>> ->
+    node_eval prog tree i (addNode (addNode tree i node1') i node2')
 
-(** If the boolean in the path condition is unsatisfiable, then we will only
-    extend the execution tree along the 'else' branch. *)
-    | E_IfThen : forall prog node be sbe then_body else_body st n pc tree,
-    node_unpack node st n pc ->
+   | E_IfThen : forall prog i node be sbe then_body else_body st n pc tree node',
+     (isLeaf tree i) = true ->
+     node = findNode tree i ->
+     node_unpack node st n pc ->
     (findStatement prog n) = <{if be then then_body else else_body end}> ->
     (makeSymbolicBool st be) = sbe ->
-    (SAT ( sbe ::pc)) ->
-    node_eval prog << st, sbe:: pc, (n + 1)>> tree ->
-    node_eval prog node (Tr node [tree])
+    (SAT (sbe::pc)) ->
+    node' = << st, sbe::pc,  (n+1)>> ->
+    node_eval prog tree i (addNode tree i node')
 
-(** If the boolean in the path condition is unsatisfiable, then we will only
-    extend the execution tree along the 'else' branch. *)
-  | E_IfElse : forall prog node be sbe then_body else_body st n pc tree,
-    node_unpack node st n pc ->
+  | E_IfElse : forall prog i node be sbe then_body else_body st n pc tree node',
+     (isLeaf tree i) = true ->
+     node = findNode tree i ->
+     node_unpack node st n pc ->
     (findStatement prog n) = <{if be then then_body else else_body end}> ->
     (makeSymbolicBool st be) = sbe ->
-    (SAT ( <[~sbe]> ::pc)) ->
-    node_eval prog << st, (<[~sbe]>):: pc, (n + (length then_body))>> tree ->
-    node_eval prog node (Tr node [tree])
+    (SAT (<[~sbe]>::pc)) ->
+    node' = << st, (<[~sbe]>)::pc, (n + (progLength then_body 1000%nat))>> ->
+    node_eval prog tree i (addNode tree i node')
 
-(** Go_To statements have no branching structure involved. There is just one child
-    node, which has an index pointing to the statement specified by the Go_To. *)
-  | E_GoTo: forall prog node i st n pc tree',
+   | E_GoTo: forall prog i node pos st n pc tree node',
+     (isLeaf tree i) = true ->
+     node = findNode tree i ->
     node_unpack node st n pc ->
-    (findStatement prog n) = <{go_to i}> ->
-    node_eval prog (Node st pc i) tree' ->
-    node_eval prog node (Tr node [tree'])
+    (findStatement prog n) = <{go_to pos}> ->
+    node' = << st, pc, pos>> ->
+    node_eval prog tree i (addNode tree i node')
 
-(** While statements are similar to If statements, in that we have to consider
-    whether the boolean expression is satisfiable or not. If so, we make two
-    branches: one going into the loop body, and another skipping the loop. The
-    next executable instruction is pointed to by separate indices in each case. We
-    add the boolean condition to the branch that executes the loop body, and its
-    negation to the branch that skips the loop. *)
-  | E_WhileBoth: forall prog node be sbe body st n pc tree1' tree2',
+  | E_WhileBoth: forall prog i node be sbe body st n pc tree node1' node2',
+     (isLeaf tree i) = true ->
+     node = findNode tree i ->
     node_unpack node st n pc ->
     (findStatement prog n) = <{while be do body end}> ->
     (makeSymbolicBool st be) = sbe ->
     (SAT (sbe:: pc)) ->
     (SAT (<[~sbe]>:: pc)) ->
-    node_eval prog << st,  sbe::pc, (n + 1) >> tree1' ->
-    node_eval prog <<  st,  (<[~sbe]>:: pc), (n + (length body)+ 1)>> tree2' ->
-    node_eval prog node (Tr node [tree1' ; tree2'])
+    node1' = << st,  sbe::pc, (n + 1) >> ->
+    node2' = << st,  (<[~sbe]>:: pc), (n + (progLength body 1000%nat)+ 1)>> -> 
+    node_eval prog tree i (addNode (addNode tree i node1') i node2')
 
-  (** If the path condition is unsatisfiable, we unconditionally skip the loop body,
-  and just have one child node representing this case. This child node has an
-  updated index and path condition. *)
-  | E_WhileBody: forall prog node be sbe body st n pc tree,
+  | E_WhileBody: forall prog i node be sbe body st n pc tree node',
+     (isLeaf tree i) = true ->
+     node = findNode tree i ->
     node_unpack node st n pc ->
     (findStatement prog n) = <{while be do body end}> ->
     (makeSymbolicBool st be) = sbe ->
     (SAT (sbe:: pc)) ->
-    node_eval prog << st, (sbe:: pc), (n + 1)>> tree ->
-    node_eval prog node (Tr node [tree])
+    node' = << st,  sbe::pc, (n + 1) >> ->
+    node_eval prog tree i (addNode tree i node')
 
-(** If the path condition is unsatisfiable, we unconditionally skip the loop body,
-    and just have one child node representing this case. This child node has an
-    updated index and path condition. *)
-  | E_WhileSkip: forall prog node be sbe body st n pc tree,
+ | E_WhileSkip: forall prog i node be sbe body st n pc tree node',
+     (isLeaf tree i) = true ->
+     node = findNode tree i ->
     node_unpack node st n pc ->
     (findStatement prog n) = <{while be do body end}> ->
     (makeSymbolicBool st be) = sbe ->
     (SAT (<[~sbe]>:: pc)) ->
-    node_eval prog << st, (<[~sbe]>:: pc), (n + (length body) + 1)>> tree ->
-    node_eval prog node (Tr node [tree])
+    node' = << st,  (<[~sbe]>:: pc), (n + (progLength body 1000%nat)+ 1)>> ->
+    node_eval prog tree i (addNode tree i node').
 
-(** When the Finish statement is evaluated, it generates no child nodes. *)
-  | E_Finish: forall prog node st n pc,
-    node_unpack node st n pc ->
-    SAT pc ->
-    (findStatement prog n) = Finish ->
-    node_eval prog node (Tr node []). *)
 
 (** This should be provable, but we'll skip it in the interest of time. It is stating
     that if a superset of a condition is satisfiable, then the condition itself is 

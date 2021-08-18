@@ -1,22 +1,13 @@
 Things to do for project
 
-- Add depth to node_eval
-	* Add more base case constructors (ex. Partially executed ?)
 - General proofs
 - Potentially separate out into one file with all definitions and another with proofs
+- Prove that when adding a node, the index in the tree of where we want to add doesn't get impacted
 
 Notation wish list:
 - Replace S (S O) in proofs with %nat
-- Put state notation inside symbolic expression brackets
 
 Later:
 - Writing a program more cleanly
   * Redefine program to match Imp model
-- Maybe move variable definitions around?
 
-
-8/13/21
-New strategy: 
-* Relating prog, old tree, leaf idx and new tree
-* want to rewrite node_eval with this new signature
-* Just finished get leaves fn to get a list of the leaves
