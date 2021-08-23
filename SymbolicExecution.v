@@ -435,7 +435,7 @@ Fixpoint makeSymbolicBool (s : state) (be : BoolExp) : SBoolExp :=
   end.
 
 Definition node_unpack (node: TreeNode)(st: state) (n: nat) (pc: PathCond) :=
-    extractState node = st /\ extractIndex node = n /\ extractPathCond node = pc.
+    extractState node = st /\ extractIndex node = n /\ extractPathCond node = pc /\ SAT pc.
 
 Fixpoint treeSize (tree: ExecutionTree) : nat :=
   match tree with
@@ -601,16 +601,28 @@ Qed.
     hypothesis: (prog, node, tree) is in node_eval relation; 
     for all of those things & more, if extract pc from node == pc and this pc is from
     a node in this relation *)
-Theorem property_1 : forall (prog: Program) (node: TreeNode) (tr : ExecutionTree),
- node_eval prog node tr ->
- SAT (extractPathCond node).
-Proof. 
-  intros. induction H. 
+Theorem property_1 : forall (prog: Program) (n: nat) (tr tr': ExecutionTree) (i: nat), 
+ node_eval prog tr n tr' ->
+ SAT (extractPathCond (findNode tr' i)).
+Proof.
+  intros. inversion H.
+  - exists nil. simpl. destruct i; reflexivity.
+  - destruct H2 as [_ [_ [H10 H11]]]. subst.
+  intros. generalize dependent tr. generalize dependent i. induction tr'.
+  - simpl. exists nil. reflexivity.
+  - intros. unfold findNode. destruct i.
+    + admit.
+    + destruct (S i <=? treeSize tr'1)%nat.
+      -- 
+
+
+  intros. induction H.
+  (* E_Empty *)
+  - simpl. destruct i. unfold SAT. exists nil. reflexivity. simpl. exists nil. reflexivity.
   (* E_Assign *)
-  - simpl in IHnode_eval. unfold node_unpack in H. destruct H as [H3 [H4  H5]]. rewrite H5. apply IHnode_eval. 
+  - 
   (* E_IFBoth *)
-  - simpl in IHnode_eval1. unfold node_unpack in H. destruct H as [H6 [H7  H8]]. rewrite H8. 
-  apply superset_SAT in IHnode_eval1. apply IHnode_eval1.
+  - 
   (* E_IFThen *)
   - simpl in IHnode_eval. unfold node_unpack in H. destruct H as [H4 [H5  H6]]. rewrite H6. apply superset_SAT in IHnode_eval.
   apply IHnode_eval.  
