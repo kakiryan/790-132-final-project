@@ -1,2 +1,13 @@
-Maps.*
+makefile
+makefile.conf
+*.aux
+.vscode/
 
+Model.*
+!Model.v
+
+Equality.*
+!Equality.v
+
+SymbolicExecution.*
+!SymbolicExecution.v
