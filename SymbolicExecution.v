@@ -494,21 +494,23 @@ Fixpoint isLeaf (tree: ExecutionTree) (target: nat) : bool :=
     nodes for unsatisfiable path conditions (i.e. false path conditions) but
     will not progress execution past these nodes. *)
 
-Inductive node_eval: Program -> ExecutionTree -> nat -> ExecutionTree -> Prop :=
+Inductive node_eval: Program -> ExecutionTree -> nat -> TreeNode -> ExecutionTree -> Prop :=
  | E_Empty: forall prog st,
    (isEmpty st) = true -> 
-   node_eval prog empty 0 (Tr <<st, nil, 0>> empty empty)
+   node_eval prog empty 0 <<st, nil, 0>> (Tr <<st, nil, 0>> empty empty)
   
   | E_Assign : forall prog i node x ie se st n pc node' tree,
+    ~(tree = empty) ->
     (isLeaf tree i) = true ->
     node = findNode tree i ->
     node_unpack node st n pc ->
     (findStatement prog n) = <{x := ie}> ->
     (makeSymbolicInt st ie) = se ->
     node' = <<(x, se) :: st, pc, n+1>> ->
-    node_eval prog tree i (addNode tree i node')
+    node_eval prog tree i node (addNode tree i node')
 
   | E_IfBoth : forall prog i node be sbe then_body else_body st n pc tree node1' node2',
+    ~(tree = empty) ->
      (isLeaf tree i) = true ->
      node = findNode tree i ->
      node_unpack node st n pc ->
@@ -518,9 +520,10 @@ Inductive node_eval: Program -> ExecutionTree -> nat -> ExecutionTree -> Prop :=
     (SAT (<[~sbe]>::pc)) ->
     node1' = << st, sbe::pc,  (n+1)>> ->
     node2' = << st, (<[~sbe]>)::pc, (n + (progLength then_body 1000%nat))>> ->
-    node_eval prog tree i (addNode (addNode tree i node1') i node2')
+    node_eval prog tree i node (addNode (addNode tree i node1') i node2')
 
    | E_IfThen : forall prog i node be sbe then_body else_body st n pc tree node',
+   ~(tree = empty) ->
      (isLeaf tree i) = true ->
      node = findNode tree i ->
      node_unpack node st n pc ->
@@ -528,9 +531,10 @@ Inductive node_eval: Program -> ExecutionTree -> nat -> ExecutionTree -> Prop :=
     (makeSymbolicBool st be) = sbe ->
     (SAT (sbe::pc)) ->
     node' = << st, sbe::pc,  (n+1)>> ->
-    node_eval prog tree i (addNode tree i node')
+    node_eval prog tree i node (addNode tree i node')
 
   | E_IfElse : forall prog i node be sbe then_body else_body st n pc tree node',
+  ~(tree = empty) ->
      (isLeaf tree i) = true ->
      node = findNode tree i ->
      node_unpack node st n pc ->
@@ -538,17 +542,19 @@ Inductive node_eval: Program -> ExecutionTree -> nat -> ExecutionTree -> Prop :=
     (makeSymbolicBool st be) = sbe ->
     (SAT (<[~sbe]>::pc)) ->
     node' = << st, (<[~sbe]>)::pc, (n + (progLength then_body 1000%nat))>> ->
-    node_eval prog tree i (addNode tree i node')
+    node_eval prog tree i node (addNode tree i node')
 
    | E_GoTo: forall prog i node pos st n pc tree node',
+   ~(tree = empty) ->
      (isLeaf tree i) = true ->
      node = findNode tree i ->
     node_unpack node st n pc ->
     (findStatement prog n) = <{go_to pos}> ->
     node' = << st, pc, pos>> ->
-    node_eval prog tree i (addNode tree i node')
+    node_eval prog tree i node (addNode tree i node')
 
   | E_WhileBoth: forall prog i node be sbe body st n pc tree node1' node2',
+  ~(tree = empty) ->
      (isLeaf tree i) = true ->
      node = findNode tree i ->
     node_unpack node st n pc ->
@@ -558,9 +564,10 @@ Inductive node_eval: Program -> ExecutionTree -> nat -> ExecutionTree -> Prop :=
     (SAT (<[~sbe]>:: pc)) ->
     node1' = << st,  sbe::pc, (n + 1) >> ->
     node2' = << st,  (<[~sbe]>:: pc), (n + (progLength body 1000%nat)+ 1)>> -> 
-    node_eval prog tree i (addNode (addNode tree i node1') i node2')
+    node_eval prog tree i node (addNode (addNode tree i node1') i node2')
 
   | E_WhileBody: forall prog i node be sbe body st n pc tree node',
+  ~(tree = empty) ->
      (isLeaf tree i) = true ->
      node = findNode tree i ->
     node_unpack node st n pc ->
@@ -568,9 +575,10 @@ Inductive node_eval: Program -> ExecutionTree -> nat -> ExecutionTree -> Prop :=
     (makeSymbolicBool st be) = sbe ->
     (SAT (sbe:: pc)) ->
     node' = << st,  sbe::pc, (n + 1) >> ->
-    node_eval prog tree i (addNode tree i node')
+    node_eval prog tree i node (addNode tree i node')
 
  | E_WhileSkip: forall prog i node be sbe body st n pc tree node',
+ ~(tree = empty) ->
      (isLeaf tree i) = true ->
      node = findNode tree i ->
     node_unpack node st n pc ->
@@ -578,7 +586,7 @@ Inductive node_eval: Program -> ExecutionTree -> nat -> ExecutionTree -> Prop :=
     (makeSymbolicBool st be) = sbe ->
     (SAT (<[~sbe]>:: pc)) ->
     node' = << st,  (<[~sbe]>:: pc), (n + (progLength body 1000%nat)+ 1)>> ->
-    node_eval prog tree i (addNode tree i node').
+    node_eval prog tree i node (addNode tree i node').
 
 
 (** This should be provable, but we'll skip it in the interest of time. It is stating
@@ -589,7 +597,15 @@ Theorem superset_SAT : forall (p: PathCond) (sbe : SBoolExp),
 Proof. intros. destruct H. unfold SAT. exists x. simpl in H. destruct (eval_pc p x). 
  - reflexivity.
  - simpl in H. rewrite andb_comm in H. simpl in H. apply H.
-Qed. 
+Qed.
+
+Inductive SAT_tree: ExecutionTree -> Prop :=
+ | SAT_empty: SAT_tree empty
+
+ | SAT_tr: forall node tr1 tr2,
+   SAT (extractPathCond node) ->
+   SAT_tree tr1 -> SAT_tree tr2 ->
+   SAT_tree (Tr node tr1 tr2).
 
 (* ================== End: Definition Symbolic Execution Concepts. ==================*)
 
@@ -601,22 +617,19 @@ Qed.
     hypothesis: (prog, node, tree) is in node_eval relation; 
     for all of those things & more, if extract pc from node == pc and this pc is from
     a node in this relation *)
-Theorem property_1 : forall (prog: Program) (n: nat) (tr tr': ExecutionTree) (i: nat), 
- node_eval prog tr n tr' ->
- SAT (extractPathCond (findNode tr' i)).
+Theorem property_1 : forall prog tr i node tr',
+  SAT_tree tr ->
+  node_eval prog tr i node tr' ->
+  SAT_tree tr'.
 Proof.
-  intros. inversion H.
-  - exists nil. simpl. destruct i; reflexivity.
-  - destruct H2 as [_ [_ [H10 H11]]]. subst.
-  intros. generalize dependent tr. generalize dependent i. induction tr'.
-  - simpl. exists nil. reflexivity.
-  - intros. unfold findNode. destruct i.
-    + admit.
-    + destruct (S i <=? treeSize tr'1)%nat.
-      -- 
-
-
   intros. induction H.
+  - inversion H0; try (destruct H; reflexivity).
+    + apply (SAT_tr <<st, [], 0>> empty empty); try apply SAT_empty.
+      exists nil. reflexivity.
+  - inversion H0.
+    + subst i0. destruct i.
+      -- simpl. admit.
+      -- simpl.
   (* E_Empty *)
   - simpl. destruct i. unfold SAT. exists nil. reflexivity. simpl. exists nil. reflexivity.
   (* E_Assign *)

@@ -1,5 +1,12 @@
 Things to do for project
 
+Immediate future steps:
+- Write node equality
+- Write tree_diff function
+- Switch between a tree and a list of all its nodes (need to have a definition of SAT_nodes)
+- tree_diff tr (add_node tr x node) = [node] theorem
+
+- Factor out into multiple files
 - General proofs
 - Potentially separate out into one file with all definitions and another with proofs
 - Prove that when adding a node, the index in the tree of where we want to add doesn't get impacted
