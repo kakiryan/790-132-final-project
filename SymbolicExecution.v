@@ -6,7 +6,7 @@ Open Scope list_scope.
 From Coq Require Import Lists.List.
 From Coq Require Import Bool.Bool.
 From Coq Require Import Structures.OrderedTypeEx.
-From SE Require Export Model.
+From SE Require Export Helpers.
 Import ListNotations.
 
 Open Scope string_scope.
@@ -32,9 +32,13 @@ https://github.com/kakiryan/790-132-final-project *)
 
 (* Declare Custom Entry com. *)
 
-
-
-
+Lemma treeDiffAddNode : forall tr (i: nat) node,
+  ~(Nat.lt i 0) -> (Nat.lt i (treeSize tr)) ->
+  treeDiff tr (addNode tr i node) = [node].
+Proof.
+  intros. induction tr.
+  - destruct i. inversion H0. inversion H0.
+  - 
 (** The following relation is our representation of symbolic execution of a program.
     It relates a given program, and a node corresponding to a particular statement,
     to a resultant execution tree. As defined here, the relation will generate 

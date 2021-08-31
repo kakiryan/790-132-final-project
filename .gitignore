@@ -9,5 +9,8 @@ Model.*
 Equality.*
 !Equality.v
 
+Helpers.*
+!Helpers.v
+
 SymbolicExecution.*
 !SymbolicExecution.v

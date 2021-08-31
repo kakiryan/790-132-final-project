@@ -91,6 +91,14 @@ Definition stateEq (st1 st2: state) : bool :=
 Definition pcEq (pc1 pc2: PathCond) : bool := 
   listEq SBoolExpEq pc1 pc2.
 
+(** Building on everything else in this file, this function tests
+    whether two nodes are equal. This definition of equality will
+    treat the node's state and path condition as sets of individual
+    mappings and boolean expressions, respectively. But we only check
+    equality naively on expressions, not worrying about rearrangements
+    of equivalent statements. In practice this isn't a problem, as
+    we mostly will be comparing nodes within one symbolic execution
+    tree. *)
 Definition nodeEq (node1 node2: TreeNode) : bool :=
   match node1 with 
   | << st1, pc1, i1 >> =>
