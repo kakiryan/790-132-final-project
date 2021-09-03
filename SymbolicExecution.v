@@ -33,12 +33,15 @@ https://github.com/kakiryan/790-132-final-project *)
 (* Declare Custom Entry com. *)
 
 Lemma treeDiffAddNode : forall tr (i: nat) node,
-  ~(Nat.lt i 0) -> (Nat.lt i (treeSize tr)) ->
   treeDiff tr (addNode tr i node) = [node].
 Proof.
-  intros. induction tr.
-  - destruct i. inversion H0. inversion H0.
-  - 
+Admitted.
+  (*intros. induction tr.
+  - destruct i.
+    *  reflexivity. 
+    * simpl. reflexivity. 
+  - simpl. destruct i. destruct tr1. unfold treeDiff. unfold MAX_TREE_DEPTH. *)
+  
 (** The following relation is our representation of symbolic execution of a program.
     It relates a given program, and a node corresponding to a particular statement,
     to a resultant execution tree. As defined here, the relation will generate 
@@ -158,6 +161,12 @@ Inductive SAT_tree: ExecutionTree -> Prop :=
    SAT_tree tr1 -> SAT_tree tr2 ->
    SAT_tree (Tr node tr1 tr2).
 
+Lemma SAT_AddNode: forall (tr: ExecutionTree)(i: nat)(node: TreeNode),
+  SAT_tree tr -> 
+  SAT (extractPathCond node) ->
+  SAT_tree (addNode tr i node).
+Proof. Admitted.
+
 (* ================== End: Definition Symbolic Execution Concepts. ==================*)
 
 (* ========================= Start: Proof of Property 1. ============================*)
@@ -173,39 +182,16 @@ Theorem property_1 : forall prog tr i node tr',
   node_eval prog tr i node tr' ->
   SAT_tree tr'.
 Proof.
-  intros. induction H.
-  - inversion H0; try (destruct H; reflexivity).
+  intros. generalize dependent tr'. induction H. 
+  - intros. inversion H0; try (destruct H; reflexivity).
     + apply (SAT_tr <<st, [], 0>> empty empty); try apply SAT_empty.
       exists nil. reflexivity.
-  - inversion H0.
-    + subst i0. destruct i.
-      -- simpl. admit.
-      -- simpl.
-  (* E_Empty *)
-  - simpl. destruct i. unfold SAT. exists nil. reflexivity. simpl. exists nil. reflexivity.
-  (* E_Assign *)
-  - 
-  (* E_IFBoth *)
-  - 
-  (* E_IFThen *)
-  - simpl in IHnode_eval. unfold node_unpack in H. destruct H as [H4 [H5  H6]]. rewrite H6. apply superset_SAT in IHnode_eval.
-  apply IHnode_eval.  
-  (* E_IFElse *)
-  - simpl in IHnode_eval. unfold node_unpack in H. destruct H as [H4 [H5  H6]]. rewrite H6. apply superset_SAT in IHnode_eval.
-    apply IHnode_eval.  
-  (* E_GoTo *)
-  - simpl in IHnode_eval. unfold node_unpack in H. destruct H as [H2 [H3  H4]]. rewrite H4. apply IHnode_eval.
-  (* E_WhileBoth *)
-  - simpl in IHnode_eval1. unfold node_unpack in H. destruct H as [H6 [H7  H8]]. rewrite H8. 
-  apply superset_SAT in IHnode_eval1. apply IHnode_eval1.  
-  (* E_WhileBody *)
-  - simpl in IHnode_eval. unfold node_unpack in H. destruct H as [H4 [H5  H6]]. rewrite H6. 
-  apply superset_SAT in IHnode_eval. apply IHnode_eval.
-  (* E_WhileSkip *)
-  - simpl in IHnode_eval.  destruct H as [H4 [H5  H6]]. rewrite H6. 
-  apply superset_SAT in IHnode_eval. apply IHnode_eval.
-  (* E_Finish *)
-  - unfold node_unpack in H.  destruct H as [H2 [H3  H4]]. rewrite H4. apply H0.
+  - intros. inversion H2. 
+    + subst i0. apply (SAT_AddNode (Tr node0 tr1 tr2) i node'). apply SAT_tr. 
+      -- apply H.
+      -- apply H0.
+      -- apply H1.
+      -- destruct H6 as [H15 [H16 [H17 H18]]]. rewrite H9. simpl. apply H18.
 Qed.
 
 (* ========================= End: Proof of Property 1. ================================*)

@@ -31,8 +31,12 @@ Fixpoint addNode (tree: ExecutionTree) (target: nat) (node: TreeNode) : Executio
     end
   | _ =>
     match tree with
-    | empty => empty (* Bad *)
-    | Tr h l r => Tr h (addNode l (target - 1) node) (addNode r (target - (treeSize l) - 1) node)
+    | empty => Tr node empty empty
+    | Tr h l r => 
+      match (Nat.ltb target (treeSize l)) with
+      | true => Tr h (addNode l (target - 1) node) r
+      | false => Tr h l (addNode r (target - (treeSize l) - 1) node)
+      end
     end 
   end.
 
