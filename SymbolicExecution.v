@@ -41,7 +41,7 @@ Admitted.
     *  reflexivity. 
     * simpl. reflexivity. 
   - simpl. destruct i. destruct tr1. unfold treeDiff. unfold MAX_TREE_DEPTH. *)
-  
+
 (** The following relation is our representation of symbolic execution of a program.
     It relates a given program, and a node corresponding to a particular statement,
     to a resultant execution tree. As defined here, the relation will generate 
@@ -49,9 +49,9 @@ Admitted.
     will not progress execution past these nodes. *)
 
 Inductive node_eval: Program -> ExecutionTree -> nat -> TreeNode -> ExecutionTree -> Prop :=
- | E_Empty: forall prog st,
-   (isEmpty st) = true -> 
-   node_eval prog empty 0 <<st, nil, 0>> (Tr <<st, nil, 0>> empty empty)
+  | E_Empty: forall prog st,
+    (isEmpty st) = true -> 
+    node_eval prog empty 0 <<st, nil, 0>> (Tr <<st, nil, 0>> empty empty)
   
   | E_Assign : forall prog i node x ie se st n pc node' tree,
     ~(tree = empty) ->
@@ -73,7 +73,7 @@ Inductive node_eval: Program -> ExecutionTree -> nat -> TreeNode -> ExecutionTre
     (SAT (sbe::pc)) ->
     (SAT (<[~sbe]>::pc)) ->
     node1' = << st, sbe::pc,  (n+1)>> ->
-    node2' = << st, (<[~sbe]>)::pc, (n + (progLength then_body 1000%nat))>> ->
+    node2' = << st, (<[~sbe]>)::pc, (n + (progLength then_body))>> ->
     node_eval prog tree i node (addNode (addNode tree i node1') i node2')
 
    | E_IfThen : forall prog i node be sbe then_body else_body st n pc tree node',
@@ -95,7 +95,7 @@ Inductive node_eval: Program -> ExecutionTree -> nat -> TreeNode -> ExecutionTre
     (findStatement prog n) = <{if be then then_body else else_body end}> ->
     (makeSymbolicBool st be) = sbe ->
     (SAT (<[~sbe]>::pc)) ->
-    node' = << st, (<[~sbe]>)::pc, (n + (progLength then_body 1000%nat))>> ->
+    node' = << st, (<[~sbe]>)::pc, (n + (progLength then_body))>> ->
     node_eval prog tree i node (addNode tree i node')
 
    | E_GoTo: forall prog i node pos st n pc tree node',
@@ -117,7 +117,7 @@ Inductive node_eval: Program -> ExecutionTree -> nat -> TreeNode -> ExecutionTre
     (SAT (sbe:: pc)) ->
     (SAT (<[~sbe]>:: pc)) ->
     node1' = << st,  sbe::pc, (n + 1) >> ->
-    node2' = << st,  (<[~sbe]>:: pc), (n + (progLength body 1000%nat)+ 1)>> -> 
+    node2' = << st,  (<[~sbe]>:: pc), (n + (progLength body)+ 1)>> -> 
     node_eval prog tree i node (addNode (addNode tree i node1') i node2')
 
   | E_WhileBody: forall prog i node be sbe body st n pc tree node',
@@ -139,7 +139,7 @@ Inductive node_eval: Program -> ExecutionTree -> nat -> TreeNode -> ExecutionTre
     (findStatement prog n) = <{while be do body end}> ->
     (makeSymbolicBool st be) = sbe ->
     (SAT (<[~sbe]>:: pc)) ->
-    node' = << st,  (<[~sbe]>:: pc), (n + (progLength body 1000%nat)+ 1)>> ->
+    node' = << st,  (<[~sbe]>:: pc), (n + (progLength body)+ 1)>> ->
     node_eval prog tree i node (addNode tree i node').
 
 

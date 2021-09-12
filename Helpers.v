@@ -1,4 +1,3 @@
-From SE Require Export Model.
 From SE Require Export Equality.
 
 Fixpoint treeSize (tree: ExecutionTree) : nat :=
@@ -57,10 +56,11 @@ Fixpoint isLeaf (tree: ExecutionTree) (target: nat) : bool :=
 
 (** This function will compare the structure of two trees:
     the common case is that the first argument is a subtree
-    of the second. Conceptually, it overlays the two trees, and returns a list of all nodes which don't have a
+    of the second. Conceptually, it overlays the two trees,
+    and returns a list of all nodes which don't have a
     counterpart in the same position in the other tree. Since
     Coq can't infer a strictly decreasing argument otherwise,
-    we provide a maximum tree depeth and wrap this helper
+    we provide a maximum tree depth and wrap this helper
     inside another function. *)
 Fixpoint treeDiffHelper (tr1 tr2: ExecutionTree) (gas: nat) : list TreeNode :=
   match gas with 

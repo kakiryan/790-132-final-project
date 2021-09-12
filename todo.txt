@@ -1,10 +1,12 @@
 Things to do for project
 
-Immediate future steps:
-- Write node equality
-- Write tree_diff function
-- Switch between a tree and a list of all its nodes (need to have a definition of SAT_nodes)
-- tree_diff tr (add_node tr x node) = [node] theorem
+Main idea: eliminate the ExecutionTree data structure, and hold the tree structure entirely
+  in the inductive relation node_eval
+- Relate a program and a single node: for each type of statement, have a constructor that
+  adds either one or two nodes to the relation
+- Now we can do induction "bottom up"
+
+Issue: will we ever need information from the whole tree? How to do property 2?
 
 - Factor out into multiple files
 - General proofs
