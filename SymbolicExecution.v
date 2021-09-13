@@ -31,13 +31,9 @@ https://github.com/kakiryan/790-132-final-project *)
     Property 3: Symbolic execution is commutative. *)
 
 (* Declare Custom Entry com. *)
-
-Lemma treeDiffAddNode : forall tr (i: nat) node,
-  treeDiff tr (addNode tr i node) = [node].
-Proof.
-Admitted.
   (*intros. induction tr.
   - destruct i.
+
     *  reflexivity. 
     * simpl. reflexivity. 
   - simpl. destruct i. destruct tr1. unfold treeDiff. unfold MAX_TREE_DEPTH. *)
@@ -48,102 +44,67 @@ Admitted.
     nodes for unsatisfiable path conditions (i.e. false path conditions) but
     will not progress execution past these nodes. *)
 
-Inductive node_eval: Program -> ExecutionTree -> nat -> TreeNode -> ExecutionTree -> Prop :=
+Inductive node_eval: Program -> TreeNode -> Prop :=
   | E_Empty: forall prog st,
     (isEmpty st) = true -> 
-    node_eval prog empty 0 <<st, nil, 0>> (Tr <<st, nil, 0>> empty empty)
+    node_eval prog <<st, nil, 0>>
   
-  | E_Assign : forall prog i node x ie se st n pc node' tree,
-    ~(tree = empty) ->
-    (isLeaf tree i) = true ->
-    node = findNode tree i ->
+  | E_Assign : forall prog node x ie se st n pc node',
     node_unpack node st n pc ->
     (findStatement prog n) = <{x := ie}> ->
     (makeSymbolicInt st ie) = se ->
     node' = <<(x, se) :: st, pc, n+1>> ->
-    node_eval prog tree i node (addNode tree i node')
+    node_eval prog node ->
+    node_eval prog node'
 
-  | E_IfBoth : forall prog i node be sbe then_body else_body st n pc tree node1' node2',
-    ~(tree = empty) ->
-     (isLeaf tree i) = true ->
-     node = findNode tree i ->
-     node_unpack node st n pc ->
-    (findStatement prog n) = <{if be then then_body else else_body end}> ->
-    (makeSymbolicBool st be) = sbe ->
-    (SAT (sbe::pc)) ->
-    (SAT (<[~sbe]>::pc)) ->
-    node1' = << st, sbe::pc,  (n+1)>> ->
-    node2' = << st, (<[~sbe]>)::pc, (n + (progLength then_body))>> ->
-    node_eval prog tree i node (addNode (addNode tree i node1') i node2')
-
-   | E_IfThen : forall prog i node be sbe then_body else_body st n pc tree node',
-   ~(tree = empty) ->
-     (isLeaf tree i) = true ->
-     node = findNode tree i ->
+   | E_IfThen : forall prog node be sbe then_body else_body st n pc node',
      node_unpack node st n pc ->
     (findStatement prog n) = <{if be then then_body else else_body end}> ->
     (makeSymbolicBool st be) = sbe ->
     (SAT (sbe::pc)) ->
     node' = << st, sbe::pc,  (n+1)>> ->
-    node_eval prog tree i node (addNode tree i node')
+    node_eval prog node ->
+    node_eval prog node'
 
-  | E_IfElse : forall prog i node be sbe then_body else_body st n pc tree node',
-  ~(tree = empty) ->
-     (isLeaf tree i) = true ->
-     node = findNode tree i ->
+  | E_IfElse : forall prog node be sbe then_body else_body st n pc node',
      node_unpack node st n pc ->
     (findStatement prog n) = <{if be then then_body else else_body end}> ->
     (makeSymbolicBool st be) = sbe ->
     (SAT (<[~sbe]>::pc)) ->
     node' = << st, (<[~sbe]>)::pc, (n + (progLength then_body))>> ->
-    node_eval prog tree i node (addNode tree i node')
+    node_eval prog node ->
+    node_eval prog node'
 
-   | E_GoTo: forall prog i node pos st n pc tree node',
-   ~(tree = empty) ->
-     (isLeaf tree i) = true ->
-     node = findNode tree i ->
+   | E_GoTo: forall prog node pos st n pc node',
     node_unpack node st n pc ->
     (findStatement prog n) = <{go_to pos}> ->
     node' = << st, pc, pos>> ->
-    node_eval prog tree i node (addNode tree i node')
+    node_eval prog node ->
+    node_eval prog node'
 
-  | E_WhileBoth: forall prog i node be sbe body st n pc tree node1' node2',
-  ~(tree = empty) ->
-     (isLeaf tree i) = true ->
-     node = findNode tree i ->
-    node_unpack node st n pc ->
-    (findStatement prog n) = <{while be do body end}> ->
-    (makeSymbolicBool st be) = sbe ->
-    (SAT (sbe:: pc)) ->
-    (SAT (<[~sbe]>:: pc)) ->
-    node1' = << st,  sbe::pc, (n + 1) >> ->
-    node2' = << st,  (<[~sbe]>:: pc), (n + (progLength body)+ 1)>> -> 
-    node_eval prog tree i node (addNode (addNode tree i node1') i node2')
-
-  | E_WhileBody: forall prog i node be sbe body st n pc tree node',
-  ~(tree = empty) ->
-     (isLeaf tree i) = true ->
-     node = findNode tree i ->
+  | E_WhileBody: forall prog node be sbe body st n pc node',
     node_unpack node st n pc ->
     (findStatement prog n) = <{while be do body end}> ->
     (makeSymbolicBool st be) = sbe ->
     (SAT (sbe:: pc)) ->
     node' = << st,  sbe::pc, (n + 1) >> ->
-    node_eval prog tree i node (addNode tree i node')
+    node_eval prog node ->
+    node_eval prog node'
 
- | E_WhileSkip: forall prog i node be sbe body st n pc tree node',
- ~(tree = empty) ->
-     (isLeaf tree i) = true ->
-     node = findNode tree i ->
+ | E_WhileSkip: forall prog node be sbe body st n pc node',
     node_unpack node st n pc ->
     (findStatement prog n) = <{while be do body end}> ->
     (makeSymbolicBool st be) = sbe ->
     (SAT (<[~sbe]>:: pc)) ->
     node' = << st,  (<[~sbe]>:: pc), (n + (progLength body)+ 1)>> ->
-    node_eval prog tree i node (addNode tree i node').
+    node_eval prog node ->
+    node_eval prog node'.
 
-
-(** This should be provable, but we'll skip it in the interest of time. It is stating
+Open Scope nat. 
+Definition leaf (prog: Program) (node: TreeNode) : Prop :=
+  node_eval prog node /\ ((progLength prog) - 1) = (extractIndex node).
+Close Scope nat.
+(** This is stating
     that if a superset of a condition is satisfiable, then the condition itself is 
     satisfiable. *)
 Theorem superset_SAT : forall (p: PathCond) (sbe : SBoolExp),
@@ -153,19 +114,6 @@ Proof. intros. destruct H. unfold SAT. exists x. simpl in H. destruct (eval_pc p
  - simpl in H. rewrite andb_comm in H. simpl in H. apply H.
 Qed.
 
-Inductive SAT_tree: ExecutionTree -> Prop :=
- | SAT_empty: SAT_tree empty
-
- | SAT_tr: forall node tr1 tr2,
-   SAT (extractPathCond node) ->
-   SAT_tree tr1 -> SAT_tree tr2 ->
-   SAT_tree (Tr node tr1 tr2).
-
-Lemma SAT_AddNode: forall (tr: ExecutionTree)(i: nat)(node: TreeNode),
-  SAT_tree tr -> 
-  SAT (extractPathCond node) ->
-  SAT_tree (addNode tr i node).
-Proof. Admitted.
 
 (* ================== End: Definition Symbolic Execution Concepts. ==================*)
 
@@ -177,98 +125,37 @@ Proof. Admitted.
     hypothesis: (prog, node, tree) is in node_eval relation; 
     for all of those things & more, if extract pc from node == pc and this pc is from
     a node in this relation *)
-Theorem property_1 : forall prog tr i node tr',
-  SAT_tree tr ->
-  node_eval prog tr i node tr' ->
-  SAT_tree tr'.
+Theorem property_1 : forall prog node,
+  node_eval prog node ->
+  SAT (extractPathCond node).
 Proof.
-  intros. generalize dependent tr'. induction H. 
-  - intros. inversion H0; try (destruct H; reflexivity).
-    + apply (SAT_tr <<st, [], 0>> empty empty); try apply SAT_empty.
-      exists nil. reflexivity.
-  - intros. inversion H2. 
-    + subst i0. apply (SAT_AddNode (Tr node0 tr1 tr2) i node'). apply SAT_tr. 
-      -- apply H.
-      -- apply H0.
-      -- apply H1.
-      -- destruct H6 as [H15 [H16 [H17 H18]]]. rewrite H9. simpl. apply H18.
+  intros. induction H; try (subst; simpl; apply H2).
+  - simpl. exists nil. reflexivity.
+  - subst. simpl. destruct H as [H4 [H5 [H6 H7]]]. rewrite H6 in IHnode_eval. apply IHnode_eval.
+  - subst; simpl. destruct H as [H4 [H5 [H6 H7]]]. rewrite H6 in IHnode_eval. apply IHnode_eval.
 Qed.
 
 (* ========================= End: Proof of Property 1. ================================*)
 
-(* ====================== Start: Proof of Property 2 for Program 1. ===================*)
+(* ====================== Start: Proof of Property 2. ===================*)
+
+Theorem property_2 : forall prog node1 node2,
+  node1 <> node2 ->
+  leaf prog node1 -> leaf prog node2 ->
+  (extractPathCond node1) <> (extractPathCond node2).
+Admitted.
+
 
 (** The following is our execution of the program shown in Figure 1 of King's
     paper. We supply the symbolic execution tree corresponding to this program
     (which is just a simple list of nodes, with no branching), and prove that
     this is indeed the correct tree. *)
 
-Definition prog_1 := [<{X := A + B}>; 
-                      <{Y := B + C}>; 
-                      <{Z := X + Y - B}>;
-                      Finish].
+Definition prog_1 := <{ X := A + B ;
+                        Y := B + C ; 
+                        Z := X + Y - B }>.
 
-Example prog_1_eval :
-  node_eval prog_1 <<empty_st, nil, 0>>
-    (Tr  << empty_st, nil, 0>> [(
-      Tr <<(X !-> <[sA + sB]> ; empty_st), nil, 1>> [(
-        Tr <<(Y !-> <[sB + sC]> ; X !-> <[sA + sB]> ; empty_st), nil, 2>> [(
-          Tr <<(Z !-> <[(sA + sB) + (sB + sC) - sB]> ; Y !-> <[sB + sC]> ;
-                    X !-> <[sA + sB]> ; empty_st), nil, 3>> nil
-    )])])]).
-Proof.
-  (* X := A + B *)
-  apply E_Assign with (x := X) (ie := <{A + B}>) (se := <[A + B]>)
-                      (st := empty_st) (n := O) (pc := nil); try reflexivity.
-    unfold SAT. exists SAT_assign_ex_1. simpl. reflexivity. 
-  (* Y := B + C *)
-  apply E_Assign with (x := Y) (ie := <{B + C}>) (se := <[B + C]>)
-                      (st := X !-> <[A + B]>; empty_st)
-                      (n := S O) (pc := nil); try reflexivity.
-    unfold SAT. exists SAT_assign_ex_1. simpl. reflexivity.
- (* Z := X + Y  - B *)  
-  apply E_Assign with (x := Z ) (ie := <{X + Y - B}>)
-                      (se := <[(sA + sB) + (sB + sC) - sB]>)
-                      (st := Y !-> <[sB + sC]> ; X !-> <[sA + sB]> ; empty_st)
-                      (n := S (S O)) (pc := nil); try reflexivity.
-    unfold SAT. exists SAT_assign_ex_1. simpl. reflexivity.
-  apply E_Finish with (st := Z !-> <[(sA + sB) + (sB + sC) - sB]> ;
-                             Y !-> <[sB + sC]> ; X !-> <[sA + sB]> ; empty_st)
-                      (n := S (S (S O))) (pc := nil); try reflexivity.
-    unfold SAT. exists SAT_assign_ex_1. simpl. reflexivity.
-Qed.
 
-(** Now that we have proven that this is the correct symbolic execution tree for the 
-    program, we will refer to it as tree_1. *)
-Definition tree_1 := 
-    (Tr  << empty_st, nil, 0>> [(
-      Tr <<(X !-> <[sA + sB]> ; empty_st), nil, 1>> [(
-        Tr <<(Y !-> <[sB + sC]> ; X !-> <[sA + sB]> ; empty_st), nil, 2>> [(
-          Tr <<(Z !-> <[(sA + sB) + (sB + sC) - sB]> ; Y !-> <[sB + sC]> ;
-                    X !-> <[sA + sB]> ; empty_st), nil, 3>> nil
-    )])])]).
-
-(** Property 2 from the paper is that every leaf node is distinct, or in other words,
-    no two leaves have the same path condition. We represent the leaves as a list of
-    the different path conditions for each example and prove that there are no
-    duplicates for each. *)
-Definition leaves := list PathCond.
-Definition prog_1_leaves: list PathCond := [nil].
-
-Definition get_head_pc (p : leaves) : PathCond :=
- match p with
-  | [] => nil
-  | h :: t => h
- end.
-
-(** The proof of this property for the first example is trivial, as there is no 
-    branching or control flow.*)
-
-Theorem property_2_ex_1 : forall (pc: PathCond),
-  (get_head_pc prog_1_leaves) = pc -> ~ (In pc (tl prog_1_leaves)).
-Proof.
-  intros. unfold not. unfold prog_1_leaves. simpl. intros. destruct H0.
-Qed.
 
 (* ==================== End: Proof of Property 2 for Program 1. ===================== *)
 
@@ -307,96 +194,6 @@ Definition SAT_assign_prog_2_false_branch: concreteState :=
 Definition empty_st_2 := (A !-> sA; B !-> sB; C !-> sC; J !-> sJ; Z !-> sZ2; Y !-> sY; 
   X !-> sX; _ !-> (Constant 0)). 
 
-
-(** This is the tree for the case that the loop (made up of an if/then + go_to) only
-    executes once. We prove that is a correct tree for the above prog_2. *)
-Example prog_2_eval :
-  node_eval prog_2  <<empty_st_2, nil, 0>>
-    (Tr <<empty_st_2, nil, 0>> [
-      Tr <<(Z !-> (Constant 1) ; empty_st_2), nil, 1>> [
-        Tr <<(J !-> (Constant 1) ; Z !-> (Constant 1) ; empty_st_2), nil, 2>> [
-          Tr <<(J !-> (Constant 1) ; Z !-> (Constant 1) ; empty_st_2),
-              [SBge0 sY], 3>> [
-            Tr <<(Z !-> <[sZ2 * sX]>; J !-> (Constant 1) ; Z !-> (Constant 1) ;
-                empty_st_2), [SBge0 sY], 4>> [
-              Tr <<(Y !-> <[sY - sJ]>; Z !-> <[sZ2 * sX]>; J !-> (Constant 1) ;
-                  Z !-> (Constant 1) ; empty_st_2), [<[sY >= 0]>], 5>> [
-                Tr <<(Y !-> <[sY - sJ]>; Z !-> <[sZ2 * sX]>; J !-> (Constant 1) ;
-                   Z !-> (Constant 1) ; empty_st_2), [<[sY >= 0]>], 2>> [
-                  Tr <<(Y !-> <[sY - sJ]>; Z !-> <[sZ2 * sX]>;J !-> (Constant 1) ;
-                      Z !-> (Constant 1) ; empty_st_2), [<[~(sY - sJ >= 0)]>;
-                      <[sY >= 0]>], 6>> nil
-          ]]]];
-          Tr << J !-> (Constant 1) ; Z !-> (Constant 1) ; empty_st_2,
-             [<[~(sY >= 0)]>], 6>> nil
-    ]]]).
-Proof.
-  (* Z := 1 *)
-  apply E_Assign with (x := Z) (ie := <{IntLit 1}>) (se := <{Constant 1}>)
-                      (st := empty_st_2) (n := O) (pc := nil);
-  try reflexivity.
-  unfold SAT. exists SAT_assign_prog_2_true_branch. simpl. reflexivity.
-  (* J := 1 *)
-  apply E_Assign with (x := J) (ie := <{IntLit 1}>) (se := <{Constant 1}>)
-                      (st := Z !-> (Constant 1) ; empty_st_2) (n := S O) (pc := nil);
-  try reflexivity.
-  unfold SAT. exists SAT_assign_prog_2_true_branch. simpl. reflexivity. 
-  (* if Y >= 0. This is true for the first iteration. *)
-  apply E_IfBoth with (be := Bge0 Y) (sbe := SBge0 sY) (then_body := [<{Z := Z * X }>;
-                                                    <{Y := Y - J}>;
-                                                    Go_To 2;
-                                                    Finish])
-                      (else_body := [Finish])
-                      (st := J !-> (Constant 1); Z !-> (Constant 1) ; empty_st_2)
-                      (n := S (S O)) (pc := nil);
-  try reflexivity.
-  unfold SAT. exists SAT_assign_prog_2_true_branch. simpl. reflexivity.
-  unfold SAT. exists SAT_assign_prog_2_false_branch. simpl. reflexivity. 
-  (* Z := Z * X  *)
-  apply E_Assign with (x := Z) (ie := <{Z * X}>) (se := <[sZ2 * sX]>)
-                      (st := J !-> (Constant 1); Z !-> (Constant 1) ; empty_st_2)
-                      (n := S (S (S O))) (pc := [<[sY >= 0]>]);
-  try reflexivity.
-  unfold SAT. exists SAT_assign_prog_2_true_branch. simpl. reflexivity. 
-  (* Y := Y - J  *)
-  apply E_Assign with (x := Y) (ie := <{Y - J}>) (se := <[sY - sJ]>)
-                      (st := Z !-> <[sZ2 * sX]>; J !-> (Constant 1);
-                      Z !-> (Constant 1) ; empty_st_2) (n := S (S (S (S O))))
-                      (pc := [<[sY >= 0]>]);
-  try reflexivity.
-  unfold SAT. exists SAT_assign_prog_2_true_branch. simpl. reflexivity.
-  (* Go_To 2. Jump back up to if statement *)
-  apply E_GoTo with (i := S (S O)) (st := Y !-> <[sY - sJ]>; Z !-> <[sZ2 * sX]>; 
-                    J !-> (Constant 1); Z !-> (Constant 1) ; empty_st_2) 
-                    (n := S (S (S (S (S O))))) (pc := [<[sY >= 0]>]);
-  try reflexivity.
-  unfold SAT. exists SAT_assign_prog_2_true_branch. simpl. reflexivity.
-  (* If Y >= 0. This is not true anymore. Have to use the above axiom for this case,
-     since now Y has been updated to be the symbol sY - sJ, but the condition is only
-     checking sY >=0. *)
-  apply E_IfElse with (be := <{Y >= 0}>) (sbe := <[(sY - sJ) >= 0]>)
-                       (then_body := [<{Z := Z * X }>;
-                                      <{Y := Y - J}>;
-                                      Go_To 2;
-                                      Finish])
-                        (else_body := [Finish]) (st := Y !-> <[sY - sJ]>;
-                        Z !-> <[sZ2 * sX]>; J !-> (Constant 1);
-                        Z !-> (Constant 1) ; empty_st_2) 
-  (n := S(S O)) (pc := [<[sY >= 0]>]);
-  try reflexivity. exists SAT_assign_prog_2_true_branch. simpl. reflexivity.
-  (* Finish. This is the end of the road for the original true branch. *)  
-  apply E_Finish with (st := Y !-> <[sY - sJ]>; Z !-> <[sZ2 * sX]>;
-                      J !-> (Constant 1); Z !-> (Constant 1) ; empty_st_2) 
-                      (n := 6%nat)
-                      (pc := [<[~((sY - sJ) >= 0)]>; <[sY >= 0]>]); 
-  try reflexivity.
-  exists SAT_assign_prog_2_true_branch. simpl. reflexivity.
-  (* Finish. This is the end of the road for the original else branch. *)  
-  apply E_Finish with (st := J !-> (Constant 1); Z !-> (Constant 1) ; empty_st_2) 
-                      (n := 6%nat) (pc := [<[~(sY >= 0)]>]);
-  try reflexivity.
-  exists SAT_assign_prog_2_false_branch. simpl. reflexivity.
-Qed.
 
 (** This symbolic execution tree ends with two leaves. *)
 Definition prog_2_leaves :=

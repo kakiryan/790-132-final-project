@@ -8,15 +8,9 @@ Main idea: eliminate the ExecutionTree data structure, and hold the tree structu
 
 Issue: will we ever need information from the whole tree? How to do property 2?
 
-- Factor out into multiple files
 - General proofs
-- Potentially separate out into one file with all definitions and another with proofs
-- Prove that when adding a node, the index in the tree of where we want to add doesn't get impacted
+- Redo example trees
 
 Notation wish list:
 - Replace S (S O) in proofs with %nat
-
-Later:
-- Writing a program more cleanly
-  * Redefine program to match Imp model
 
