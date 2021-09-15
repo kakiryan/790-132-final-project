@@ -315,20 +315,17 @@ Open Scope nat.
 Fixpoint findStatement (prog: Program) (i: nat) : Statement :=
   match i with
   | O => match prog with 
-    | Assignment x ie => Assignment x ie
     | Seq p1 p2 => findStatement p1 O
-    | If b t e => If b t e
-    | While b body => While b body
-    | Go_To n => Go_To n 
+    | _ => prog
     end
   | S i' => match prog with
     | Assignment x ie => Assignment x ie
     | Seq p1 p2 =>
       if ((progLength p1) <=? i) then (findStatement p1 i)
-        else (findStatement p2 i)
+        else (findStatement p2 (i - (progLength p1)))
     | If b t e =>
       if (progLength t <=? i') then (findStatement t i')
-        else (findStatement e i')
+        else (findStatement e (i' - (progLength t)))
     | While b body => findStatement body i'
     | Go_To n => Go_To n 
     end
@@ -460,4 +457,4 @@ Fixpoint makeSymbolicBool (s : state) (be : BoolExp) : SBoolExp :=
   end.
 
 Definition node_unpack (node: TreeNode)(st: state) (n: nat) (pc: PathCond) :=
-    extractState node = st /\ extractIndex node = n /\ extractPathCond node = pc /\ SAT pc.
+    extractState node = st /\ extractIndex node = n /\ extractPathCond node = pc.
