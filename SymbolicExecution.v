@@ -50,7 +50,7 @@ Inductive node_eval: Program -> TreeNode -> Prop :=
     node_eval prog <<st, nil, 0>>
   
   | E_Assign : forall prog node x ie se st n pc node',
-    node_unpack node st n pc ->
+    node = << st, pc, n>> ->
     (findStatement prog n) = <{x := ie}> ->
     (makeSymbolicInt st ie) = se ->
     node' = <<(x, se) :: st, pc, n+1>> ->
@@ -58,7 +58,7 @@ Inductive node_eval: Program -> TreeNode -> Prop :=
     node_eval prog node'
 
    | E_IfThen : forall prog node be sbe then_body else_body st n pc node',
-     node_unpack node st n pc ->
+    node = << st, pc, n>> ->
     (findStatement prog n) = <{if be then then_body else else_body end}> ->
     (makeSymbolicBool st be) = sbe ->
     (SAT (sbe::pc)) ->
@@ -67,7 +67,7 @@ Inductive node_eval: Program -> TreeNode -> Prop :=
     node_eval prog node'
 
   | E_IfElse : forall prog node be sbe then_body else_body st n pc node',
-     node_unpack node st n pc ->
+    node = << st, pc, n>> ->
     (findStatement prog n) = <{if be then then_body else else_body end}> ->
     (makeSymbolicBool st be) = sbe ->
     (SAT (<[~sbe]>::pc)) ->
@@ -76,14 +76,14 @@ Inductive node_eval: Program -> TreeNode -> Prop :=
     node_eval prog node'
 
    | E_GoTo: forall prog node pos st n pc node',
-    node_unpack node st n pc ->
+    node = << st, pc, n>> ->
     (findStatement prog n) = <{go_to pos}> ->
     node' = << st, pc, pos>> ->
     node_eval prog node ->
     node_eval prog node'
 
   | E_WhileBody: forall prog node be sbe body st n pc node',
-    node_unpack node st n pc ->
+    node = << st, pc, n>> ->
     (findStatement prog n) = <{while be do body end}> ->
     (makeSymbolicBool st be) = sbe ->
     (SAT (sbe:: pc)) ->
@@ -92,7 +92,7 @@ Inductive node_eval: Program -> TreeNode -> Prop :=
     node_eval prog node'
 
  | E_WhileSkip: forall prog node be sbe body st n pc node',
-    node_unpack node st n pc ->
+    node = << st, pc, n>> ->
     (findStatement prog n) = <{while be do body end}> ->
     (makeSymbolicBool st be) = sbe ->
     (SAT (<[~sbe]>:: pc)) ->
@@ -131,18 +131,30 @@ Theorem property_1 : forall prog node,
 Proof.
   intros. induction H; subst; simpl; try apply H2.
   - exists nil. reflexivity.
-  - destruct H as [H4 [H5 H6]]. rewrite H6 in IHnode_eval. apply IHnode_eval.
-  - destruct H as [H4 [H5 H6]]. rewrite H6 in IHnode_eval. apply IHnode_eval.
+  - simpl in IHnode_eval. apply IHnode_eval.
+  - simpl in IHnode_eval. apply IHnode_eval.
 Qed.
 
 (* ========================= End: Proof of Property 1. ================================*)
 
 (* ====================== Start: Proof of Property 2. ===================*)
 
+Close Scope string_scope. 
 Theorem property_2 : forall prog node1 node2,
-  node1 <> node2 ->
-  leaf prog node1 -> leaf prog node2 ->
-  (extractPathCond node1) <> (extractPathCond node2).
+  node_eval prog node1 ->
+  node_eval prog node2 ->
+  ~(node_eval prog node1 -> node_eval prog node2) ->
+   ~(node_eval prog node2 -> node_eval prog node1) ->
+  ~ (SAT ((extractPathCond node1) ++ (extractPathCond node2))).
+Proof.
+ intros. generalize dependent node2. induction H; intros.
+- induction H0;
+  try (destruct H2; intros; apply E_Empty; apply H).
+ - inversion H4. 
+  * destruct H5. intros. apply H4.
+  * subst. simpl in *. 
+ apply IHnode_eval with (node2 := <<(x0, makeSymbolicInt st0 ie0) :: st0, pc0, n0 +1 >>);
+   auto. 
 Admitted.
 
 
