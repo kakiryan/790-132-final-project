@@ -114,6 +114,12 @@ Proof. intros. destruct H. unfold SAT. exists x. simpl in H. destruct (eval_pc p
  - rewrite andb_comm in H. simpl in H. apply H.
 Qed.
 
+Theorem superset_SAT_contra: forall (p: PathCond) (sbe : SBoolExp),
+  ~(SAT p) -> ~(SAT (sbe::p)).
+Proof.
+  intros. unfold not; intros. apply superset_SAT in H0. apply H in H0. apply H0.
+Qed.
+
 
 (* ================== End: Definition Symbolic Execution Concepts. ==================*)
 
@@ -147,15 +153,68 @@ Theorem property_2 : forall prog node1 node2,
    ~(node_eval prog node2 -> node_eval prog node1) ->
   ~ (SAT ((extractPathCond node1) ++ (extractPathCond node2))).
 Proof.
- intros. generalize dependent node2. induction H; intros.
-- induction H0;
+  intros. generalize dependent node2. induction H; intros.
+  - induction H0;
   try (destruct H2; intros; apply E_Empty; apply H).
- - inversion H4. 
-  * destruct H5. intros. apply H4.
-  * subst. simpl in *. 
- apply IHnode_eval with (node2 := <<(x0, makeSymbolicInt st0 ie0) :: st0, pc0, n0 +1 >>);
-   auto. 
-Admitted.
+  - inversion H4; subst; simpl in *. 
+    * apply IHnode_eval with (node2 := << st0, [], 0 >>); auto.
+    * apply IHnode_eval with (node2 := <<(x0, makeSymbolicInt st0 ie0) :: st0, pc0, n0 +1 >>); auto. 
+    * apply IHnode_eval with (node2 := << st0, makeSymbolicBool st0 be :: pc0, n0 + 1 >>); auto.
+    * apply IHnode_eval with (node2 := << st0, <[ ~ (makeSymbolicBool st0 be) ]> :: pc0,
+    n0 + progLength then_body >>); auto.
+    * apply IHnode_eval with (node2 := << st0, pc0, pos >>); auto.
+    * apply IHnode_eval with (node2 := << st0, makeSymbolicBool st0 be :: pc0, n0 + 1 >>); auto.
+    * apply IHnode_eval with (node2 := << st0, <[ ~ (makeSymbolicBool st0 be) ]> :: pc0,
+    n0 + progLength body + 1 >>); auto.
+  - inversion H5; subst; simpl in *; apply superset_SAT_contra.
+    * destruct H6. intros. apply H5.
+    * apply IHnode_eval with (node2 := << (x, makeSymbolicInt st0 ie) :: st0, pc0, n0 + 1 >>); auto.
+    * apply IHnode_eval with (node2 := << st0, makeSymbolicBool st0 be0 :: pc0, n0 + 1 >> ); auto.
+    * apply IHnode_eval with (node2 := << st0, <[ ~ (makeSymbolicBool st0 be0) ]> :: pc0,
+    n0 + progLength then_body0 >> ); auto.
+    * apply IHnode_eval with (node2 := << st0, pc0, pos >> ); auto.
+    * apply IHnode_eval with (node2 := << st0, makeSymbolicBool st0 be0 :: pc0, n0 + 1 >> ); auto.
+    * apply IHnode_eval with (node2 := << st0, <[ ~ (makeSymbolicBool st0 be0) ]> :: pc0, n0 + progLength body + 1 >> ); auto.
+  - inversion H5; subst; simpl in *; apply superset_SAT_contra.
+    * destruct H6. intros. apply H5.
+    * apply IHnode_eval with (node2 := << (x, makeSymbolicInt st0 ie) :: st0, pc0, n0 + 1 >>); auto.
+    * apply IHnode_eval with (node2 := << st0, makeSymbolicBool st0 be0 :: pc0, n0 + 1 >> ); auto.
+    * apply IHnode_eval with (node2 := << st0, <[ ~ (makeSymbolicBool st0 be0) ]> :: pc0,
+    n0 + progLength then_body0 >> ); auto.
+    * apply IHnode_eval with (node2 := << st0, pc0, pos >> ); auto.
+    * apply IHnode_eval with (node2 := << st0, makeSymbolicBool st0 be0 :: pc0, n0 + 1 >> ); auto.
+    * apply IHnode_eval with (node2 := << st0, <[ ~ (makeSymbolicBool st0 be0) ]> :: pc0, n0 + progLength body + 1 >> ); auto.
+  - inversion H3; subst; simpl in *.
+    * destruct H5; intros. apply E_GoTo with (node:=<<st, pc, n>>) (pos:=pos) (st:=st) (n:=n) (pc:=pc); auto.
+    * apply IHnode_eval with (node2 := << (x, makeSymbolicInt st0 ie) :: st0, pc0, n0 + 1 >>); auto.
+    * apply IHnode_eval with (node2 := << st0, makeSymbolicBool st0 be :: pc0, n0 + 1 >>); auto.
+    * apply IHnode_eval with (node2 := << st0, <[ ~ (makeSymbolicBool st0 be) ]> :: pc0,
+    n0 + progLength then_body >>); auto.
+    * apply IHnode_eval with (node2 := << st0, pc0, pos0 >>); auto.
+    * apply IHnode_eval with (node2 := << st0, makeSymbolicBool st0 be :: pc0, n0 + 1 >>); auto.
+    * apply IHnode_eval with (node2 := << st0, <[ ~ (makeSymbolicBool st0 be) ]> :: pc0,
+    n0 + progLength body + 1 >>); auto.
+  - inversion H5; subst; simpl in *; apply superset_SAT_contra.
+    * apply IHnode_eval with (node2 := << st0, [], 0 >>); auto.
+    * apply IHnode_eval with (node2 := << (x, makeSymbolicInt st0 ie) :: st0, pc0, n0 + 1 >>); auto.
+    * apply IHnode_eval with (node2 := << st0, makeSymbolicBool st0 be0 :: pc0, n0 + 1 >>); auto.
+    * apply IHnode_eval with (node2 := << st0, <[ ~ (makeSymbolicBool st0 be0) ]> :: pc0,
+    n0 + progLength then_body >>); auto.
+    * apply IHnode_eval with (node2 := << st0, pc0, pos >>); auto.
+    * apply IHnode_eval with (node2 := << st0, makeSymbolicBool st0 be0 :: pc0, n0 + 1 >>); auto.
+    * apply IHnode_eval with (node2 := << st0, <[ ~ (makeSymbolicBool st0 be0) ]> :: pc0,
+    n0 + progLength body0 + 1 >>); auto.
+  - inversion H5; subst; simpl in *; apply superset_SAT_contra.
+    * apply IHnode_eval with (node2 := << st0, [], 0 >>); auto.
+    * apply IHnode_eval with (node2 := << (x, makeSymbolicInt st0 ie) :: st0, pc0, n0 + 1 >>); auto.
+    * apply IHnode_eval with (node2 := << st0, makeSymbolicBool st0 be0 :: pc0, n0 + 1 >>); auto.
+    * apply IHnode_eval with (node2 := << st0, <[ ~ (makeSymbolicBool st0 be0) ]> :: pc0,
+    n0 + progLength then_body >>); auto.
+    * apply IHnode_eval with (node2 := << st0, pc0, pos >>); auto.
+    * apply IHnode_eval with (node2 := << st0, makeSymbolicBool st0 be0 :: pc0, n0 + 1 >>); auto.
+    * apply IHnode_eval with (node2 := << st0, <[ ~ (makeSymbolicBool st0 be0) ]> :: pc0,
+    n0 + progLength body0 + 1 >>); auto.
+Qed.
 
 
 (** The following is our execution of the program shown in Figure 1 of King's
