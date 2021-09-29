@@ -53,7 +53,7 @@ Inductive node_eval: Program -> TreeNode -> Prop :=
     node = << st, pc, n>> ->
     (findStatement prog n) = <{x := ie}> ->
     (makeSymbolicInt st ie) = se ->
-    node' = <<(x, se) :: st, pc, n+1>> ->
+    node' = <<(x, se) :: st, pc, (nextInstruction prog n)>> ->
     node_eval prog node ->
     node_eval prog node'
 

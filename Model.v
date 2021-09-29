@@ -330,6 +330,21 @@ Fixpoint findStatement (prog: Program) (i: nat) : Statement :=
     | Go_To n => Go_To n 
     end
   end.
+
+(** This logic only matters when i points to an assignment. Otherwise
+    we're able to compute the next instruction pointer directly. *)
+Fixpoint nextInstruction (prog: Program) (i: nat) : nat :=
+  match prog with 
+  | Assignment x ie => 1
+  | Seq p1 p2 => if ((progLength p1) <=? i+1) then (nextInstruction p1 i)
+                   else (progLength p1) + (nextInstruction p2 (i - (progLength p1)))
+  | If b t e => if ((progLength t) =? (i-2)) then (progLength prog)
+                  else i+1
+  | While b body => if ((progLength body) =? (i-2)) then 0
+                      else i+1
+  | Go_To n => 1
+  end.
+
 Close Scope nat.
 
 (* Constant for default gas parameter.*)
@@ -455,6 +470,3 @@ Fixpoint makeSymbolicBool (s : state) (be : BoolExp) : SBoolExp :=
   | Bnot b => <[~ (makeSymbolicBool s b)]>
   | Bge0 ie => <[(makeSymbolicInt s ie) >= 0]>
   end.
-
-Definition node_unpack (node: TreeNode)(st: state) (n: nat) (pc: PathCond) :=
-    extractState node = st /\ extractIndex node = n /\ extractPathCond node = pc.
