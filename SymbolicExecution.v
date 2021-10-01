@@ -53,7 +53,7 @@ Inductive node_eval: Program -> TreeNode -> Prop :=
     node = << st, pc, n>> ->
     (findStatement prog n) = <{x := ie}> ->
     (makeSymbolicInt st ie) = se ->
-    node' = <<(x, se) :: st, pc, (nextInstruction prog n)>> ->
+    node' = <<(x, se) :: st, pc, n+1>> ->
     node_eval prog node ->
     node_eval prog node'
 
@@ -143,17 +143,40 @@ Qed.
 
 (* ========================= End: Proof of Property 1. ================================*)
 
+Definition prog_1 := <{ X := A + B ;
+                        Y := B + C ; 
+                        Z := X + Y - B }>.
+
+Definition empty_st := [(A, sA); (B, sB); (C, sC)].
+
+(** node = << st, pc, n>> ->
+    (findStatement prog n) = <{x := ie}> ->
+    (makeSymbolicInt st ie) = se ->
+    node' = <<(x, se) :: st, pc, n+1>> ->
+    node_eval prog node ->
+    node_eval prog node' *)
+
+Example prog_1_ex : node_eval prog_1 <<[(Z, <[sA + sB + sB + sC - sB]>); (Y, <[sB + sC]>); (X, <[sA + sB]>); (A, sA); (B, sB); (C, sC)], nil, 3>>.
+Proof.
+  assert (H: node_eval prog_1 <<empty_st, nil, 0>>). { apply E_Empty. reflexivity. }
+  apply E_Assign with (x := X) (ie := <{A + B}>) (se := <[sA + sB]>) (st := empty_st) (n := 0%nat) (pc := nil) (node' := <<(X, <[sA + sB]>) :: empty_st, nil, 1%nat>>) in H; try reflexivity.
+  apply E_Assign with (x := Y) (ie := <{B + C}>) (se := <[sB + sC]>) (st := (X, <[sA + sB]>) :: empty_st) (n := 1%nat) (pc := nil) (node' := <<(Y, <[sB + sC]>) :: (X, <[sA + sB]>) :: empty_st, nil, 2%nat>>) in H; try reflexivity.
+  apply E_Assign with (x := Z) (ie := <{X + Y - B}>) (se := <[sA + sB + (sB + sC) - sB]>) (st := (Y, <[sB + sC]>) :: (X, <[sA + sB]>) :: empty_st) (n := 2%nat) (pc := nil) (node' := <<(Z, <[sA + sB + (sB + sC) - sB]>) :: (Y, <[sB + sC]>) :: (X, <[sA + sB]>) :: empty_st, nil, 3%nat>>) in H; try reflexivity. admit. simpl. admit. simpl.
+
 (* ====================== Start: Proof of Property 2. ===================*)
+
+Definition ancestor (prog: Program) (node1 node2: TreeNode) : Prop :=
+  (node_eval prog node1) -> (node_eval prog node2).
 
 Close Scope string_scope. 
 Theorem property_2 : forall prog node1 node2,
   node_eval prog node1 ->
   node_eval prog node2 ->
   ~(node_eval prog node1 -> node_eval prog node2) ->
-   ~(node_eval prog node2 -> node_eval prog node1) ->
-  ~ (SAT ((extractPathCond node1) ++ (extractPathCond node2))).
+  ~(node_eval prog node2 -> node_eval prog node1) ->
+  False.
 Proof.
-  intros. generalize dependent node2. induction H; intros.
+  intros. destruct H1. intros. apply H0. Qed. destruct H1. generalize dependent node2. induction H; intros.
   - induction H0;
   try (destruct H2; intros; apply E_Empty; apply H).
   - inversion H4; subst; simpl in *. 

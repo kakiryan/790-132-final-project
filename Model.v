@@ -321,7 +321,7 @@ Fixpoint findStatement (prog: Program) (i: nat) : Statement :=
   | S i' => match prog with
     | Assignment x ie => Assignment x ie
     | Seq p1 p2 =>
-      if ((progLength p1) <=? i) then (findStatement p1 i)
+      if (i <=? (progLength p1)) then (findStatement p1 i)
         else (findStatement p2 (i - (progLength p1)))
     | If b t e =>
       if (progLength t <=? i') then (findStatement t i')
