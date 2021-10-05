@@ -49,54 +49,55 @@ Inductive node_eval: Program -> TreeNode -> Prop :=
     (isEmpty st) = true -> 
     node_eval prog <<st, nil, 0>>
   
-  | E_Assign : forall prog node x ie se st n pc node',
-    node = << st, pc, n>> ->
+  | E_Assign : forall prog x ie st pc n,
+    let se := (makeSymbolicInt st ie) in
+    let node := <<st, pc, n>> in
+    let node' := <<(x, se) :: st, pc, n+1>> in
     (findStatement prog n) = <{x := ie}> ->
-    (makeSymbolicInt st ie) = se ->
-    node' = <<(x, se) :: st, pc, n+1>> ->
     node_eval prog node ->
     node_eval prog node'
 
-   | E_IfThen : forall prog node be sbe then_body else_body st n pc node',
-    node = << st, pc, n>> ->
+   | E_IfThen : forall prog be then_body else_body st pc n,
+    let sbe := (makeSymbolicBool st be) in
+    let node := <<st, pc, n>> in
+    let node' := <<st, sbe::pc, (n+1)>> in
     (findStatement prog n) = <{if be then then_body else else_body end}> ->
     (makeSymbolicBool st be) = sbe ->
     (SAT (sbe::pc)) ->
-    node' = << st, sbe::pc,  (n+1)>> ->
     node_eval prog node ->
     node_eval prog node'
 
-  | E_IfElse : forall prog node be sbe then_body else_body st n pc node',
-    node = << st, pc, n>> ->
+  | E_IfElse : forall prog be then_body else_body st pc n,
+    let sbe := (makeSymbolicBool st be) in
+    let node := <<st, pc, n>> in
+    let node' := << st, (<[~sbe]>)::pc, (n + (progLength then_body))>> in
     (findStatement prog n) = <{if be then then_body else else_body end}> ->
-    (makeSymbolicBool st be) = sbe ->
     (SAT (<[~sbe]>::pc)) ->
-    node' = << st, (<[~sbe]>)::pc, (n + (progLength then_body))>> ->
     node_eval prog node ->
     node_eval prog node'
 
-   | E_GoTo: forall prog node pos st n pc node',
-    node = << st, pc, n>> ->
+   | E_GoTo: forall prog pos st pc n,
+    let node := << st, pc, n>> in
+    let node' := <<st, pc, pos>> in
     (findStatement prog n) = <{go_to pos}> ->
-    node' = << st, pc, pos>> ->
     node_eval prog node ->
     node_eval prog node'
 
-  | E_WhileBody: forall prog node be sbe body st n pc node',
-    node = << st, pc, n>> ->
+  | E_WhileBody: forall prog be body st pc n,
+    let sbe := (makeSymbolicBool st be) in
+    let node := <<st, pc, n>> in
+    let node' := <<st, sbe::pc, (n + 1)>> in
     (findStatement prog n) = <{while be do body end}> ->
-    (makeSymbolicBool st be) = sbe ->
     (SAT (sbe:: pc)) ->
-    node' = << st,  sbe::pc, (n + 1) >> ->
     node_eval prog node ->
     node_eval prog node'
 
- | E_WhileSkip: forall prog node be sbe body st n pc node',
-    node = << st, pc, n>> ->
+ | E_WhileSkip: forall prog be body st pc n,
+    let sbe := (makeSymbolicBool st be) in
+    let node := <<st, pc, n>> in
+    let node' := << st, (<[~sbe]>:: pc), (n + (progLength body) + 1)>> in
     (findStatement prog n) = <{while be do body end}> ->
-    (makeSymbolicBool st be) = sbe ->
     (SAT (<[~sbe]>:: pc)) ->
-    node' = << st,  (<[~sbe]>:: pc), (n + (progLength body)+ 1)>> ->
     node_eval prog node ->
     node_eval prog node'.
 
@@ -135,11 +136,15 @@ Theorem property_1 : forall prog node,
   node_eval prog node ->
   SAT (extractPathCond node).
 Proof.
-  intros. induction H; subst; simpl; try apply H2.
+  intros. induction H; subst; simpl; try auto.
   - exists nil. reflexivity.
-  - simpl in IHnode_eval. apply IHnode_eval.
-  - simpl in IHnode_eval. apply IHnode_eval.
 Qed.
+  (** auto seems to take care of everything?? *)
+  (* - simpl in IHnode_eval. apply IHnode_eval.
+  - apply H1.
+  - apply H0.
+  - 
+Qed. *)
 
 (* ========================= End: Proof of Property 1. ================================*)
 
@@ -156,12 +161,16 @@ Definition empty_st := [(A, sA); (B, sB); (C, sC)].
     node_eval prog node ->
     node_eval prog node' *)
 
-Example prog_1_ex : node_eval prog_1 <<[(Z, <[sA + sB + sB + sC - sB]>); (Y, <[sB + sC]>); (X, <[sA + sB]>); (A, sA); (B, sB); (C, sC)], nil, 3>>.
+Example prog_1_ex : node_eval prog_1 <<[(Z, <[sA + sB + (sB + sC) - sB]>); (Y, <[sB + sC]>); (X, <[sA + sB]>); (A, sA); (B, sB); (C, sC)], nil, 3>>.
 Proof.
   assert (H: node_eval prog_1 <<empty_st, nil, 0>>). { apply E_Empty. reflexivity. }
-  apply E_Assign with (x := X) (ie := <{A + B}>) (se := <[sA + sB]>) (st := empty_st) (n := 0%nat) (pc := nil) (node' := <<(X, <[sA + sB]>) :: empty_st, nil, 1%nat>>) in H; try reflexivity.
-  apply E_Assign with (x := Y) (ie := <{B + C}>) (se := <[sB + sC]>) (st := (X, <[sA + sB]>) :: empty_st) (n := 1%nat) (pc := nil) (node' := <<(Y, <[sB + sC]>) :: (X, <[sA + sB]>) :: empty_st, nil, 2%nat>>) in H; try reflexivity.
-  apply E_Assign with (x := Z) (ie := <{X + Y - B}>) (se := <[sA + sB + (sB + sC) - sB]>) (st := (Y, <[sB + sC]>) :: (X, <[sA + sB]>) :: empty_st) (n := 2%nat) (pc := nil) (node' := <<(Z, <[sA + sB + (sB + sC) - sB]>) :: (Y, <[sB + sC]>) :: (X, <[sA + sB]>) :: empty_st, nil, 3%nat>>) in H; try reflexivity. admit. simpl. admit. simpl.
+  apply E_Assign with (x := X) (ie := <{A + B}>) (st := empty_st) (n := 0%nat) (pc := nil) in H; try reflexivity.
+  apply E_Assign with (x := Y) (ie := <{B + C}>) (st := (X, <[sA + sB]>) :: empty_st) (n := 1%nat) (pc := nil) in H; try reflexivity.
+  apply E_Assign with (x := Z) (ie := <{X + Y - B}>) (st := (Y, <[sB + sC]>) :: (X, <[sA + sB]>) :: empty_st) (n := 2%nat) (pc := nil) in H; try reflexivity.
+  simpl in H. apply H.
+Qed.
+
+(** Issue with findStatement that needs to be addressed. *)
 
 (* ====================== Start: Proof of Property 2. ===================*)
 
