@@ -1,16 +1,4 @@
 Things to do for project
 
-Main idea: eliminate the ExecutionTree data structure, and hold the tree structure entirely
-  in the inductive relation node_eval
-- Relate a program and a single node: for each type of statement, have a constructor that
-  adds either one or two nodes to the relation
-- Now we can do induction "bottom up"
-
-Issue: will we ever need information from the whole tree? How to do property 2?
-
 - General proofs
-- Redo example trees
-
-Notation wish list:
-- Replace S (S O) in proofs with %nat
-
+- Write a lemma base node with empty state always in path 

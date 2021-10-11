@@ -5,6 +5,8 @@ Open Scope list_scope.
 (** From LF Require Import Maps. *)
 From Coq Require Import Lists.List.
 From Coq Require Import Bool.Bool.
+From Coq Require Import Logic.Classical_Pred_Type.
+From Coq Require Import Logic.Classical_Prop.
 From Coq Require Import Structures.OrderedTypeEx.
 From SE Require Export Model.
 Import ListNotations.
@@ -44,64 +46,62 @@ https://github.com/kakiryan/790-132-final-project *)
     nodes for unsatisfiable path conditions (i.e. false path conditions) but
     will not progress execution past these nodes. *)
 
-Inductive node_eval (prog: Program) : TreeNode -> Prop :=
+Inductive node_eval (prog: Program) : TreeNode -> list TreeNode -> Prop :=
   | E_Empty: forall st,
     (isEmpty st) = true -> 
-    node_eval prog <<st, nil, 0>>
+    node_eval prog <<st, nil, 0>> nil
   
-  | E_Assign : forall x ie st pc n,
+  | E_Assign : forall x ie st pc n path,
     let se := (makeSymbolicInt st ie) in
     let node := <<st, pc, n>> in
     let node' := <<(x, se) :: st, pc, n+1>> in
     (findStatement prog n) = <{x := ie}> ->
-    node_eval prog node ->
-    node_eval prog node'
+    node_eval prog node path ->
+    node_eval prog node' (node :: path)
 
-   | E_IfThen : forall be then_body else_body st pc n,
+   | E_IfThen : forall be then_body else_body st pc n path,
     let sbe := (makeSymbolicBool st be) in
     let node := <<st, pc, n>> in
     let node' := <<st, sbe::pc, (n+1)>> in
     (findStatement prog n) = <{if be then then_body else else_body end}> ->
     (makeSymbolicBool st be) = sbe ->
     (SAT (sbe::pc)) ->
-    node_eval prog node ->
-    node_eval prog node'
+    node_eval prog node path ->
+    node_eval prog node' (node :: path)
 
-  | E_IfElse : forall be then_body else_body st pc n,
+  | E_IfElse : forall be then_body else_body st pc n path,
     let sbe := (makeSymbolicBool st be) in
     let node := <<st, pc, n>> in
     let node' := << st, (<[~sbe]>)::pc, (n + (progLength then_body))>> in
     (findStatement prog n) = <{if be then then_body else else_body end}> ->
     (SAT (<[~sbe]>::pc)) ->
-    node_eval prog node ->
-    node_eval prog node'
+    node_eval prog node path ->
+    node_eval prog node' (node :: path)
 
-   | E_GoTo: forall pos st pc n,
+   | E_GoTo: forall pos st pc n path,
     let node := << st, pc, n>> in
     let node' := <<st, pc, pos>> in
     (findStatement prog n) = <{go_to pos}> ->
-    node_eval prog node ->
-    node_eval prog node'
+    node_eval prog node path ->
+    node_eval prog node' (node :: path)
 
-  | E_WhileBody: forall be body st pc n,
+  | E_WhileBody: forall be body st pc n path,
     let sbe := (makeSymbolicBool st be) in
     let node := <<st, pc, n>> in
     let node' := <<st, sbe::pc, (n + 1)>> in
     (findStatement prog n) = <{while be do body end}> ->
     (SAT (sbe:: pc)) ->
-    node_eval prog node ->
-    node_eval prog node'
+    node_eval prog node path ->
+    node_eval prog node' (node :: path)
 
- | E_WhileSkip: forall be body st pc n,
+ | E_WhileSkip: forall be body st pc n path,
     let sbe := (makeSymbolicBool st be) in
     let node := <<st, pc, n>> in
     let node' := << st, (<[~sbe]>:: pc), (n + (progLength body) + 1)>> in
     (findStatement prog n) = <{while be do body end}> ->
     (SAT (<[~sbe]>:: pc)) ->
-    node_eval prog node ->
-    node_eval prog node'.
-
-Print E_WhileSkip.
+    node_eval prog node path ->
+    node_eval prog node' (node :: path).
 
 Open Scope nat. 
 Definition leaf (prog: Program) (node: TreeNode) : Prop :=
@@ -134,19 +134,13 @@ Qed.
     hypothesis: (prog, node, tree) is in node_eval relation; 
     for all of those things & more, if extract pc from node == pc and this pc is from
     a node in this relation *)
-Theorem property_1 : forall prog node,
-  node_eval prog node ->
+Theorem property_1 : forall prog node path,
+  node_eval prog node path ->
   SAT (extractPathCond node).
 Proof.
   intros. induction H; subst; simpl; try auto.
   - exists nil. reflexivity.
 Qed.
-  (** auto seems to take care of everything?? *)
-  (* - simpl in IHnode_eval. apply IHnode_eval.
-  - apply H1.
-  - apply H0.
-  - 
-Qed. *)
 
 (* ========================= End: Proof of Property 1. ================================*)
 
@@ -156,99 +150,46 @@ Definition prog_1 := <{ X := A + B ;
 
 Definition empty_st := [(A, sA); (B, sB); (C, sC)].
 
-(** node = << st, pc, n>> ->
-    (findStatement prog n) = <{x := ie}> ->
-    (makeSymbolicInt st ie) = se ->
-    node' = <<(x, se) :: st, pc, n+1>> ->
-    node_eval prog node ->
-    node_eval prog node' *)
 
-Example prog_1_ex : node_eval prog_1 <<[(Z, <[sA + sB + (sB + sC) - sB]>); (Y, <[sB + sC]>); (X, <[sA + sB]>); (A, sA); (B, sB); (C, sC)], nil, 3>>.
+(**Example prog_1_ex : node_eval prog_1 <<[(Z, <[sA + sB + (sB + sC) - sB]>); (Y, <[sB + sC]>); (X, <[sA + sB]>); (A, sA); (B, sB); (C, sC)], nil, 3>>.
 Proof.
   assert (H: node_eval prog_1 <<empty_st, nil, 0>>). { apply E_Empty. reflexivity. }
   apply E_Assign with (x := X) (ie := <{A + B}>) (st := empty_st) (n := 0%nat) (pc := nil) in H; try reflexivity.
   apply E_Assign with (x := Y) (ie := <{B + C}>) (st := (X, <[sA + sB]>) :: empty_st) (n := 1%nat) (pc := nil) in H; try reflexivity.
   apply E_Assign with (x := Z) (ie := <{X + Y - B}>) (st := (Y, <[sB + sC]>) :: (X, <[sA + sB]>) :: empty_st) (n := 2%nat) (pc := nil) in H; try reflexivity.
   simpl in H. apply H.
-Qed.
+Qed.*)
 
 (** Issue with findStatement that needs to be addressed. *)
 
 (* ====================== Start: Proof of Property 2. ===================*)
 
-Definition ancestor (prog: Program) (node1 node2: TreeNode) : Prop :=
-  (node_eval prog node1) -> (node_eval prog node2).
+Require Import ClassicalFacts.
+
+
+Lemma base_path : forall prog node path,
+
+
+
+Definition ancestor (prog: Program) (node1 node2: TreeNode) (path: list TreeNode) : Prop := 
+ node_eval prog node2 path /\ In node1 path.
 
 Close Scope string_scope. 
-Theorem property_2 : forall prog node1 node2,
-  node_eval prog node1 ->
-  node_eval prog node2 ->
-  ~(node_eval prog node1 -> node_eval prog node2) ->
-  ~(node_eval prog node2 -> node_eval prog node1) ->
-  False.
+Theorem property_2 : forall prog node1 node2 path1 path2, 
+(node_eval prog node1 path1) -> 
+(node_eval prog node2 path2) ->
+  ~(ancestor prog node1 node2 path2) ->
+  ~(ancestor prog node2 node1 path1) ->
+  ~ (SAT (( extractPathCond node1) ++ (extractPathCond node2))).
 Proof.
-  intros. destruct H1. intros. apply H0. Qed. destruct H1. generalize dependent node2. induction H; intros.
-  - induction H0;
-  try (destruct H2; intros; apply E_Empty; apply H).
-  - inversion H4; subst; simpl in *. 
-    * apply IHnode_eval with (node2 := << st0, [], 0 >>); auto.
-    * apply IHnode_eval with (node2 := <<(x0, makeSymbolicInt st0 ie0) :: st0, pc0, n0 +1 >>); auto. 
-    * apply IHnode_eval with (node2 := << st0, makeSymbolicBool st0 be :: pc0, n0 + 1 >>); auto.
-    * apply IHnode_eval with (node2 := << st0, <[ ~ (makeSymbolicBool st0 be) ]> :: pc0,
-    n0 + progLength then_body >>); auto.
-    * apply IHnode_eval with (node2 := << st0, pc0, pos >>); auto.
-    * apply IHnode_eval with (node2 := << st0, makeSymbolicBool st0 be :: pc0, n0 + 1 >>); auto.
-    * apply IHnode_eval with (node2 := << st0, <[ ~ (makeSymbolicBool st0 be) ]> :: pc0,
-    n0 + progLength body + 1 >>); auto.
-  - inversion H5; subst; simpl in *; apply superset_SAT_contra.
-    * destruct H6. intros. apply H5.
-    * apply IHnode_eval with (node2 := << (x, makeSymbolicInt st0 ie) :: st0, pc0, n0 + 1 >>); auto.
-    * apply IHnode_eval with (node2 := << st0, makeSymbolicBool st0 be0 :: pc0, n0 + 1 >> ); auto.
-    * apply IHnode_eval with (node2 := << st0, <[ ~ (makeSymbolicBool st0 be0) ]> :: pc0,
-    n0 + progLength then_body0 >> ); auto.
-    * apply IHnode_eval with (node2 := << st0, pc0, pos >> ); auto.
-    * apply IHnode_eval with (node2 := << st0, makeSymbolicBool st0 be0 :: pc0, n0 + 1 >> ); auto.
-    * apply IHnode_eval with (node2 := << st0, <[ ~ (makeSymbolicBool st0 be0) ]> :: pc0, n0 + progLength body + 1 >> ); auto.
-  - inversion H5; subst; simpl in *; apply superset_SAT_contra.
-    * destruct H6. intros. apply H5.
-    * apply IHnode_eval with (node2 := << (x, makeSymbolicInt st0 ie) :: st0, pc0, n0 + 1 >>); auto.
-    * apply IHnode_eval with (node2 := << st0, makeSymbolicBool st0 be0 :: pc0, n0 + 1 >> ); auto.
-    * apply IHnode_eval with (node2 := << st0, <[ ~ (makeSymbolicBool st0 be0) ]> :: pc0,
-    n0 + progLength then_body0 >> ); auto.
-    * apply IHnode_eval with (node2 := << st0, pc0, pos >> ); auto.
-    * apply IHnode_eval with (node2 := << st0, makeSymbolicBool st0 be0 :: pc0, n0 + 1 >> ); auto.
-    * apply IHnode_eval with (node2 := << st0, <[ ~ (makeSymbolicBool st0 be0) ]> :: pc0, n0 + progLength body + 1 >> ); auto.
-  - inversion H3; subst; simpl in *.
-    * destruct H5; intros. apply E_GoTo with (node:=<<st, pc, n>>) (pos:=pos) (st:=st) (n:=n) (pc:=pc); auto.
-    * apply IHnode_eval with (node2 := << (x, makeSymbolicInt st0 ie) :: st0, pc0, n0 + 1 >>); auto.
-    * apply IHnode_eval with (node2 := << st0, makeSymbolicBool st0 be :: pc0, n0 + 1 >>); auto.
-    * apply IHnode_eval with (node2 := << st0, <[ ~ (makeSymbolicBool st0 be) ]> :: pc0,
-    n0 + progLength then_body >>); auto.
-    * apply IHnode_eval with (node2 := << st0, pc0, pos0 >>); auto.
-    * apply IHnode_eval with (node2 := << st0, makeSymbolicBool st0 be :: pc0, n0 + 1 >>); auto.
-    * apply IHnode_eval with (node2 := << st0, <[ ~ (makeSymbolicBool st0 be) ]> :: pc0,
-    n0 + progLength body + 1 >>); auto.
-  - inversion H5; subst; simpl in *; apply superset_SAT_contra.
-    * apply IHnode_eval with (node2 := << st0, [], 0 >>); auto.
-    * apply IHnode_eval with (node2 := << (x, makeSymbolicInt st0 ie) :: st0, pc0, n0 + 1 >>); auto.
-    * apply IHnode_eval with (node2 := << st0, makeSymbolicBool st0 be0 :: pc0, n0 + 1 >>); auto.
-    * apply IHnode_eval with (node2 := << st0, <[ ~ (makeSymbolicBool st0 be0) ]> :: pc0,
-    n0 + progLength then_body >>); auto.
-    * apply IHnode_eval with (node2 := << st0, pc0, pos >>); auto.
-    * apply IHnode_eval with (node2 := << st0, makeSymbolicBool st0 be0 :: pc0, n0 + 1 >>); auto.
-    * apply IHnode_eval with (node2 := << st0, <[ ~ (makeSymbolicBool st0 be0) ]> :: pc0,
-    n0 + progLength body0 + 1 >>); auto.
-  - inversion H5; subst; simpl in *; apply superset_SAT_contra.
-    * apply IHnode_eval with (node2 := << st0, [], 0 >>); auto.
-    * apply IHnode_eval with (node2 := << (x, makeSymbolicInt st0 ie) :: st0, pc0, n0 + 1 >>); auto.
-    * apply IHnode_eval with (node2 := << st0, makeSymbolicBool st0 be0 :: pc0, n0 + 1 >>); auto.
-    * apply IHnode_eval with (node2 := << st0, <[ ~ (makeSymbolicBool st0 be0) ]> :: pc0,
-    n0 + progLength then_body >>); auto.
-    * apply IHnode_eval with (node2 := << st0, pc0, pos >>); auto.
-    * apply IHnode_eval with (node2 := << st0, makeSymbolicBool st0 be0 :: pc0, n0 + 1 >>); auto.
-    * apply IHnode_eval with (node2 := << st0, <[ ~ (makeSymbolicBool st0 be0) ]> :: pc0,
-    n0 + progLength body0 + 1 >>); auto.
-Qed.
+  intros. intros H3. unfold ancestor in H1. apply not_and_or in H1.
+  destruct H1.
+  - apply H1. apply H0.
+  - unfold ancestor in H2. apply not_and_or in H2. destruct H2.
+  ** apply H2. apply H.
+  ** induction H.
+    -- apply H1.
+  apply  in H1.
 
 
 (** The following is our execution of the program shown in Figure 1 of King's
