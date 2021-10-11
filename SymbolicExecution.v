@@ -44,12 +44,12 @@ https://github.com/kakiryan/790-132-final-project *)
     nodes for unsatisfiable path conditions (i.e. false path conditions) but
     will not progress execution past these nodes. *)
 
-Inductive node_eval: Program -> TreeNode -> Prop :=
-  | E_Empty: forall prog st,
+Inductive node_eval (prog: Program) : TreeNode -> Prop :=
+  | E_Empty: forall st,
     (isEmpty st) = true -> 
     node_eval prog <<st, nil, 0>>
   
-  | E_Assign : forall prog x ie st pc n,
+  | E_Assign : forall x ie st pc n,
     let se := (makeSymbolicInt st ie) in
     let node := <<st, pc, n>> in
     let node' := <<(x, se) :: st, pc, n+1>> in
@@ -57,7 +57,7 @@ Inductive node_eval: Program -> TreeNode -> Prop :=
     node_eval prog node ->
     node_eval prog node'
 
-   | E_IfThen : forall prog be then_body else_body st pc n,
+   | E_IfThen : forall be then_body else_body st pc n,
     let sbe := (makeSymbolicBool st be) in
     let node := <<st, pc, n>> in
     let node' := <<st, sbe::pc, (n+1)>> in
@@ -67,7 +67,7 @@ Inductive node_eval: Program -> TreeNode -> Prop :=
     node_eval prog node ->
     node_eval prog node'
 
-  | E_IfElse : forall prog be then_body else_body st pc n,
+  | E_IfElse : forall be then_body else_body st pc n,
     let sbe := (makeSymbolicBool st be) in
     let node := <<st, pc, n>> in
     let node' := << st, (<[~sbe]>)::pc, (n + (progLength then_body))>> in
@@ -76,14 +76,14 @@ Inductive node_eval: Program -> TreeNode -> Prop :=
     node_eval prog node ->
     node_eval prog node'
 
-   | E_GoTo: forall prog pos st pc n,
+   | E_GoTo: forall pos st pc n,
     let node := << st, pc, n>> in
     let node' := <<st, pc, pos>> in
     (findStatement prog n) = <{go_to pos}> ->
     node_eval prog node ->
     node_eval prog node'
 
-  | E_WhileBody: forall prog be body st pc n,
+  | E_WhileBody: forall be body st pc n,
     let sbe := (makeSymbolicBool st be) in
     let node := <<st, pc, n>> in
     let node' := <<st, sbe::pc, (n + 1)>> in
@@ -92,7 +92,7 @@ Inductive node_eval: Program -> TreeNode -> Prop :=
     node_eval prog node ->
     node_eval prog node'
 
- | E_WhileSkip: forall prog be body st pc n,
+ | E_WhileSkip: forall be body st pc n,
     let sbe := (makeSymbolicBool st be) in
     let node := <<st, pc, n>> in
     let node' := << st, (<[~sbe]>:: pc), (n + (progLength body) + 1)>> in
@@ -100,6 +100,8 @@ Inductive node_eval: Program -> TreeNode -> Prop :=
     (SAT (<[~sbe]>:: pc)) ->
     node_eval prog node ->
     node_eval prog node'.
+
+Print E_WhileSkip.
 
 Open Scope nat. 
 Definition leaf (prog: Program) (node: TreeNode) : Prop :=
