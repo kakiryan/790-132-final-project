@@ -245,21 +245,31 @@ Inductive Statement :=
 | While (b: BoolExp) (body: Statement)
 | Go_To (idx: nat).
 
-(* Inductive Statement := 
-  | Assignment (x: string) (a: IntExp) 
-  | If (b: BoolExp) (then_block: list Statement) (else_then: list Statement)
-  | While (b: BoolExp) (body: list Statement)
-  | Go_To (idx: nat)
-  | Finish. *)
+Inductive Program := 
+  | P (stmt: Statement) (params: list string).
 
-(** As mentioned above, each program is represented as a list of statements. *)
-(* Definition Program := list Statement. *)
-Definition Program := Statement.
+Definition stmts (prog: Program) :=
+  match prog with
+  | P stmt params => stmt
+  end.
+
+Open Scope string_scope.
+
+Fixpoint paramsToEmptySt (params: list string) : state :=
+  match params with
+  | nil => nil
+  | h :: t => (h, Symbol("s" ++ h)) :: (paramsToEmptySt t)
+  end.
+
+Definition emptySt (prog: Program) : state :=
+  match prog with
+  | P stmt params => paramsToEmptySt params
+  end.
 
 (** This function is used to compute the length of a program. The gas parameter is
     needed so that Coq can verify that our recursion is decreasing. *)
 
-Fixpoint progLength (prog: Program) : nat :=
+Fixpoint progLength (prog: Statement) : nat :=
   match prog with
   | Assignment _ _ => 1
   | Seq p1 p2 => (progLength p1) + (progLength p2)
@@ -267,23 +277,6 @@ Fixpoint progLength (prog: Program) : nat :=
   | While b body => 1 + (progLength body)
   | Go_To _ => 1
   end.
-
-(* Fixpoint progLength (prog : Program) (gas : nat) : nat :=
-  match gas with
-  | O => O 
-  | S gas' => match prog with 
-    | nil => O 
-    | h :: t => match h with 
-      | Assignment x a => 1 + (progLength t gas')
-      | If b th el => 
-        1 + (progLength th gas') + (progLength el gas') + (progLength t gas')
-      | While b body => 1 + (progLength body gas') + (progLength t gas')
-      | Go_To idx => 1 + (progLength t gas')
-      (** We will never have Finish inside the middle of a program. *)
-      | Finish => O
-      end
-    end
-  end. *)
   
 (** Since our Node data structure and the Go_To statement constructor reference an
     instruction by its index, we need a way to assign a unique index number to each
@@ -312,7 +305,7 @@ Fixpoint progLength (prog: Program) : nat :=
     index is greater than the length of the then block, we know the desired statement is 
     either in the else block or outside of the if/else statement entirely. *)
 Open Scope nat.
-Fixpoint findStatement (prog: Program) (i: nat) : Statement :=
+Fixpoint findStatement (prog: Statement) (i: nat) : Statement :=
   match i with
   | O => match prog with 
     | Seq p1 p2 => findStatement p1 O
@@ -333,7 +326,7 @@ Fixpoint findStatement (prog: Program) (i: nat) : Statement :=
 
 (** This logic only matters when i points to an assignment. Otherwise
     we're able to compute the next instruction pointer directly. *)
-Fixpoint nextInstruction (prog: Program) (i: nat) : nat :=
+Fixpoint nextInstruction (prog: Statement) (i: nat) : nat :=
   match prog with 
   | Assignment x ie => 1
   | Seq p1 p2 => if ((progLength p1) <=? i+1) then (nextInstruction p1 i)
@@ -346,45 +339,6 @@ Fixpoint nextInstruction (prog: Program) (i: nat) : nat :=
   end.
 
 Close Scope nat.
-
-(* Constant for default gas parameter.*)
-(* Definition MAX_PROG_LENGTH := 1000%nat. *)
-
-(* This function returns the statement in our program at index i. *)
-(* Fixpoint findStatement (prog : Program) (i : nat) : Statement :=
-  match i with 
-  | O => match prog with 
-    | nil => Go_To 0
-    | h :: t => h
-  end
-  | S i' => match prog with 
-    | nil => Go_To 0
-    | h :: t => match h with
-      | Assignment x a => findStatement t i'
-      (* For If statements, we need to recursively flatten the structure
-      within the 'then' and 'else' blocks. *)
-      | If b th e => match Nat.leb (progLength th MAX_PROG_LENGTH) i' with
-          | true => match Nat.leb ((progLength th MAX_PROG_LENGTH) + 
-                              (progLength e MAX_PROG_LENGTH)) i' with
-            | true => findStatement t (i' - (progLength th MAX_PROG_LENGTH) - 
-                                      (progLength e MAX_PROG_LENGTH))
-            | false => findStatement e (i' - (progLength th MAX_PROG_LENGTH))
-            end 
-          | false => findStatement th i'
-        end
-      (* Similarly, for While statements, we must recursively flatten the
-      structure within the loop body. *)
-      | While b body => match Nat.leb (progLength body MAX_PROG_LENGTH) i' with
-          | true => findStatement t (i' - (progLength body MAX_PROG_LENGTH))
-          | false => findStatement body i'
-        end
-      | Go_To j => findStatement t i'
-      (* If we reach this constructor, then we're looking for an instructon
-      past the end of the program. This case isn't valid. *)
-      | Finish => Finish
-    end
-  end
-end. *)
   
 (** The following notation is inspired by the Imp chapter,
     with some minor modifications. *)

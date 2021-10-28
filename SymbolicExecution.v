@@ -10,8 +10,7 @@ From Coq Require Import Logic.Classical_Prop.
 From Coq Require Import Structures.OrderedTypeEx.
 From SE Require Export Model.
 Import ListNotations.
-
-Open Scope string_scope.
+Close Scope string_scope.
 
 (** Link to our repo: 
 https://github.com/kakiryan/790-132-final-project *)
@@ -47,66 +46,62 @@ https://github.com/kakiryan/790-132-final-project *)
     will not progress execution past these nodes. *)
 
 Inductive node_eval (prog: Program) : TreeNode -> list TreeNode -> Prop :=
-  | E_Empty: forall st,
-    (isEmpty st) = true -> 
-    node_eval prog <<st, nil, 0>> nil
+  | E_Empty:
+    let st := (emptySt prog) in
+    node_eval prog <<st, nil, 0>> [<<st, nil, 0>>]
   
   | E_Assign : forall x ie st pc n path,
     let se := (makeSymbolicInt st ie) in
     let node := <<st, pc, n>> in
     let node' := <<(x, se) :: st, pc, n+1>> in
-    (findStatement prog n) = <{x := ie}> ->
+    (findStatement (stmts prog) n) = <{x := ie}> ->
     node_eval prog node path ->
-    node_eval prog node' (node :: path)
+    node_eval prog node' (node' :: path)
 
    | E_IfThen : forall be then_body else_body st pc n path,
     let sbe := (makeSymbolicBool st be) in
     let node := <<st, pc, n>> in
     let node' := <<st, sbe::pc, (n+1)>> in
-    (findStatement prog n) = <{if be then then_body else else_body end}> ->
+    (findStatement (stmts prog) n) = <{if be then then_body else else_body end}> ->
     (makeSymbolicBool st be) = sbe ->
     (SAT (sbe::pc)) ->
     node_eval prog node path ->
-    node_eval prog node' (node :: path)
+    node_eval prog node' (node' :: path)
 
   | E_IfElse : forall be then_body else_body st pc n path,
     let sbe := (makeSymbolicBool st be) in
     let node := <<st, pc, n>> in
     let node' := << st, (<[~sbe]>)::pc, (n + (progLength then_body))>> in
-    (findStatement prog n) = <{if be then then_body else else_body end}> ->
+    (findStatement (stmts prog) n) = <{if be then then_body else else_body end}> ->
     (SAT (<[~sbe]>::pc)) ->
     node_eval prog node path ->
-    node_eval prog node' (node :: path)
+    node_eval prog node' (node' :: path)
 
    | E_GoTo: forall pos st pc n path,
     let node := << st, pc, n>> in
     let node' := <<st, pc, pos>> in
-    (findStatement prog n) = <{go_to pos}> ->
+    (findStatement (stmts prog) n) = <{go_to pos}> ->
     node_eval prog node path ->
-    node_eval prog node' (node :: path)
+    node_eval prog node' (node' :: path)
 
   | E_WhileBody: forall be body st pc n path,
     let sbe := (makeSymbolicBool st be) in
     let node := <<st, pc, n>> in
     let node' := <<st, sbe::pc, (n + 1)>> in
-    (findStatement prog n) = <{while be do body end}> ->
+    (findStatement (stmts prog) n) = <{while be do body end}> ->
     (SAT (sbe:: pc)) ->
     node_eval prog node path ->
-    node_eval prog node' (node :: path)
+    node_eval prog node' (node' :: path)
 
  | E_WhileSkip: forall be body st pc n path,
     let sbe := (makeSymbolicBool st be) in
     let node := <<st, pc, n>> in
     let node' := << st, (<[~sbe]>:: pc), (n + (progLength body) + 1)>> in
-    (findStatement prog n) = <{while be do body end}> ->
+    (findStatement (stmts prog) n) = <{while be do body end}> ->
     (SAT (<[~sbe]>:: pc)) ->
     node_eval prog node path ->
-    node_eval prog node' (node :: path).
+    node_eval prog node' (node' :: path).
 
-Open Scope nat. 
-Definition leaf (prog: Program) (node: TreeNode) : Prop :=
-  node_eval prog node /\ ((progLength prog) - 1) = (extractIndex node).
-Close Scope nat.
 (** This is stating
     that if a superset of a condition is satisfiable, then the condition itself is 
     satisfiable. *)
@@ -117,23 +112,71 @@ Proof. intros. destruct H. unfold SAT. exists x. simpl in H. destruct (eval_pc p
  - rewrite andb_comm in H. simpl in H. apply H.
 Qed.
 
-Theorem superset_SAT_contra: forall (p: PathCond) (sbe : SBoolExp),
-  ~(SAT p) -> ~(SAT (sbe::p)).
+Lemma eval_pc_false : forall p cs,
+  eval_pc p cs = false ->
+  exists sbe, In sbe p /\ (substituteBool sbe cs) = false.
 Proof.
-  intros. unfold not; intros. apply superset_SAT in H0. apply H in H0. apply H0.
+  intros. induction p.
+  discriminate.
+  simpl in H. remember (substituteBool a cs).
+  destruct b.
+  - simpl in H. apply IHp in H. destruct H as [sbe [H1 H2]].
+    exists sbe. split. right. apply H1. apply H2.
+  - exists a. split. left. reflexivity. easy.
 Qed.
 
+Lemma SAT_terms : forall p,
+  SAT p <-> exists cs, forall sbe, (In sbe p -> (substituteBool sbe cs) = true).
+Proof.
+  split; intros.
+  - unfold SAT in H. destruct H. exists x. induction p.
+    + intros. destruct H0.
+    + intros. simpl in H. destruct H0.
+      * subst. destruct (substituteBool sbe x).
+        reflexivity. discriminate.
+      * apply IHp. destruct (substituteBool a x).
+        simpl in H. destruct (eval_pc p x).
+        reflexivity. discriminate. discriminate.
+        apply H0.
+  - destruct H as [cs H]. induction p.
+    + exists nil. reflexivity.
+    + exists cs. simpl. assert (substituteBool a cs = true).
+    { apply (H a). left; reflexivity. } rewrite H0. simpl.
+    remember (eval_pc p cs). destruct b.
+    * reflexivity.
+    * symmetry in Heqb. apply eval_pc_false in Heqb.
+      destruct Heqb as [sbe [H1 H2]].
+      assert (substituteBool sbe cs = true).
+      { apply (H sbe). right. apply H1. }
+      rewrite H2 in H3. apply H3.
+Qed.
+
+Lemma SAT_comm : forall p1 p2,
+  SAT (p1 ++ p2) -> SAT (p2 ++ p1).
+Proof.
+  intros. apply SAT_terms. apply SAT_terms in H.
+  destruct H as [cs H]. exists cs; intros.
+  apply in_app_or in H0. destruct H0.
+  - destruct p2. destruct H0.
+    apply H. apply in_or_app. right. apply H0.
+  - destruct p1. destruct H0.
+    apply H. apply in_or_app. left. apply H0.
+Qed.
+  
+Lemma superset_SAT_paths : forall p1 p2,
+  SAT (p1 ++ p2) -> SAT p2.
+Proof.
+  intros. induction p1.
+  - easy.
+  - apply (superset_SAT (p1 ++ p2) a) in H.
+    apply IHp1 in H. apply H.
+Qed.
 
 (* ================== End: Definition Symbolic Execution Concepts. ==================*)
 
 (* ========================= Start: Proof of Property 1. ============================*)
 
-(** A general proof of property 1 from the King paper, that the 
-    path condition never becomes identically false. 
-
-    hypothesis: (prog, node, tree) is in node_eval relation; 
-    for all of those things & more, if extract pc from node == pc and this pc is from
-    a node in this relation *)
+(** The path condition never becomes identically false.  *)
 Theorem property_1 : forall prog node path,
   node_eval prog node path ->
   SAT (extractPathCond node).
@@ -142,7 +185,7 @@ Proof.
   - exists nil. reflexivity.
 Qed.
 
-(* ========================= End: Proof of Property 1. ================================*)
+(* ========================= End: Proof of Property 1. ==============================*)
 
 Definition prog_1 := <{ X := A + B ;
                         Y := B + C ; 
@@ -160,21 +203,127 @@ Proof.
   simpl in H. apply H.
 Qed.*)
 
-(** Issue with findStatement that needs to be addressed. *)
-
 (* ====================== Start: Proof of Property 2. ===================*)
 
-Require Import ClassicalFacts.
+(* Lemma nil_path : forall prog node path,
+  node_eval prog node path ->
+  path = [] ->
+  node = <<(emptySt prog), nil, 0>>.
+Proof.
+  intros. induction H; try reflexivity; try discriminate.
+Qed. *)
 
+Lemma node_path : forall prog node path,
+  node_eval prog node path ->
+  In node path.
+Proof.
+  intros. induction H; left; easy.
+Qed.
+
+Lemma node_path_2 : forall prog node path,
+  node_eval prog node path ->
+  nth 0%nat path <<emptySt prog, nil, 0>> = node.
+Proof.
+  intros; inversion H; reflexivity.
+Qed.
 
 Lemma base_path : forall prog node path,
+  node_eval prog node path ->
+  In <<(emptySt prog), nil, 0>> path.
+Proof.
+  intros. induction H;
+  try (left; reflexivity);
+  try (right; apply IHnode_eval).
+Qed.
+  
+  (** Version for path without current node at head. *)
+  (* intros remember H as H'. clear HeqH'. induction H;
+  (** Base case is a contradiction. *)
+  try easy. - 
+  (** Otherwise, we have two cases: either the parent
+      node is the root (with an empty path), or it's not
+      and we can apply the inductive hypothesis. *)
+  destruct path;
+  try (right; apply IHnode_eval; easy).
+  - apply nil_path in H1. left. easy. easy.
+  - apply nil_path in H3. left. easy. easy.
+  - apply nil_path in H2. left. easy. easy.
+  - apply nil_path in H1. left. easy. easy.
+  - apply nil_path in H2. left. easy. easy.
+  - apply nil_path in H2. left. easy. easy. *)
 
+Definition ancestor (prog: Program) (node1 node2: TreeNode) (path2: list TreeNode): Prop :=
+  node_eval prog node2 path2 /\ In node1 path2.
 
+Lemma ancestor_eval : forall prog node1 node2 path2,
+  ancestor prog node1 node2 path2 -> exists path1, node_eval prog node1 path1.
+Proof.
+  intros. destruct H; induction H; destruct H0;
+    try (exists path; rewrite <- H0; easy);
+    try (apply IHnode_eval in H0; apply H0).
+Qed.
 
-Definition ancestor (prog: Program) (node1 node2: TreeNode) (path: list TreeNode) : Prop := 
- node_eval prog node2 path /\ In node1 path.
+Lemma pathcond_extend : forall prog node1 node2 path2,
+  (ancestor prog node1 node2 path2) ->
+  exists path_subset, extractPathCond node2 = path_subset ++ extractPathCond node1.
+Proof. Admitted.
+  (* intros. destruct H. induction H; destruct H0; try (rewrite <- H0);
+    try (exists nil; simpl; unfold node; reflexivity);
+    try (apply IHnode_eval in H0; apply H0).
+  - exists [sbe]; reflexivity.
+  - apply IHnode_eval in H0. destruct H0 as [p Hp].
+    exists (sbe :: p). unfold node in Hp; simpl in *. rewrite Hp; reflexivity.
+  - exists [<[~sbe]>]; reflexivity.
+  - apply IHnode_eval in H0. destruct H0 as [p Hp].
+    exists (<[~sbe]> :: p). unfold node in Hp; simpl in *. rewrite Hp; reflexivity.
+  - exists [sbe]; reflexivity.
+  - apply IHnode_eval in H0. destruct H0 as [p Hp].
+    exists (sbe :: p). unfold node in Hp; simpl in *. rewrite Hp; reflexivity.
+  - exists [<[~sbe]>]; reflexivity.
+  - apply IHnode_eval in H0. destruct H0 as [p Hp].
+    exists (<[~sbe]> :: p). unfold node in Hp; simpl in *. rewrite Hp; reflexivity.
+Qed. *)
 
-Close Scope string_scope. 
+(* Lemma path_extend : forall prog node1 node2 path1 path2,
+  node_eval prog node1 path1 ->
+  ancestor prog node1 node2 path2 ->
+  exists path_subset, path2 = path_subset ++ path1.
+Proof. Abort. *)
+
+Lemma path_extend : forall prog node node' path,
+  node_eval prog node' (node' :: node :: path) ->
+  node_eval prog node (node :: path).
+Proof.
+  intros. inversion H;
+  try (subst; remember H4 as H5; clear HeqH5;
+    apply node_path_2 in H4; simpl in H4;
+    rewrite <- H4 in H5; apply H5).
+  - subst. remember H3 as H4. clear HeqH4.
+    apply node_path_2 in H3. simpl in H3.
+    rewrite <- H3 in H4. apply H4.
+  - subst. remember H5 as H6. clear HeqH6.
+    apply node_path_2 in H5. simpl in H5.
+    rewrite <- H5 in H6. apply H6.
+  - subst. remember H3 as H4. clear HeqH4.
+    apply node_path_2 in H3. simpl in H3.
+    rewrite <- H3 in H4. apply H4.
+Qed.
+
+Theorem property_2_simpler : forall prog node1 node2 path2,
+  ancestor prog node1 node2 path2 ->
+  SAT ((extractPathCond node1) ++ (extractPathCond node2)).
+Proof.
+  intros. remember H as H1. clear HeqH1.
+  apply pathcond_extend in H1. destruct H1 as [p H0].
+  rewrite H0. apply SAT_comm.
+  unfold ancestor in H. destruct H as [H _].
+  apply property_1 in H. rewrite H0 in H.
+  apply SAT_terms in H. destruct H as [cs H].
+  apply SAT_terms. exists cs; intros. apply in_app_or in H1.
+  destruct H1. apply H in H1. easy.
+  apply H. apply in_or_app. right. easy.
+Qed.
+
 Theorem property_2 : forall prog node1 node2 path1 path2, 
 (node_eval prog node1 path1) -> 
 (node_eval prog node2 path2) ->
@@ -182,30 +331,29 @@ Theorem property_2 : forall prog node1 node2 path1 path2,
   ~(ancestor prog node2 node1 path1) ->
   ~ (SAT (( extractPathCond node1) ++ (extractPathCond node2))).
 Proof.
-  intros. intros H3. unfold ancestor in H1. apply not_and_or in H1.
-  destruct H1.
-  - apply H1. apply H0.
-  - unfold ancestor in H2. apply not_and_or in H2. destruct H2.
-  ** apply H2. apply H.
-  ** induction H.
-    -- apply H1.
-  apply  in H1.
+  intros. intros H4. unfold ancestor in H1. apply not_and_or in H1.
+  (** Since we have assumed that both nodes are in the relation, we need to
+      unfold the ancestor definition to get that neither node is in the other's path. *)
+  destruct H1. apply H1. apply H0.
+  unfold ancestor in H2. apply not_and_or in H2.
+  destruct H2. apply H2. apply H. remember H as E. clear HeqE.
+  (** Now we can proceed by induction on H. *)
+  induction H; intros.
+    - apply base_path in H0. apply H1 in H0. apply H0.
+    - apply IHnode_eval; auto.
+      + clear IHnode_eval. clear H. clear H3. intro Hc.
+      apply H2. right.
+        apply node_path in H0.
+        destruct path2 as [| h t]. destruct Hc.
+        destruct Hc. unfold In in H1. apply not_or_and in H1.
+        destruct H1 as [H1 _]. destruct H1. apply H. 
+      + 
+    (* - apply IHnode_eval. admit. intros HI. apply H2. right. apply HI.
+      simpl in *. apply H3.
+    -  *)
 
 
-(** The following is our execution of the program shown in Figure 1 of King's
-    paper. We supply the symbolic execution tree corresponding to this program
-    (which is just a simple list of nodes, with no branching), and prove that
-    this is indeed the correct tree. *)
-
-Definition prog_1 := <{ X := A + B ;
-                        Y := B + C ; 
-                        Z := X + Y - B }>.
-
-
-
-(* ==================== End: Proof of Property 2 for Program 1. ===================== *)
-
-(* ==================== Start: Proof of Property 2 for Program 2. =================== *)
+(* ==================== End: Proof of Property 2 ===================== *)
 
 (* Setting up new variable names for example 2. *)
 Definition J: string := "J".
