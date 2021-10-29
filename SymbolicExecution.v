@@ -257,11 +257,11 @@ Definition ancestor (prog: Program) (node1 node2: TreeNode) (path2: list TreeNod
 
 Lemma ancestor_eval : forall prog node1 node2 path2,
   ancestor prog node1 node2 path2 -> exists path1, node_eval prog node1 path1.
-Proof.
-  intros. destruct H; induction H; destruct H0;
+Proof. Admitted.
+  (* intros. destruct H; induction H; destruct H0;
     try (exists path; rewrite <- H0; easy);
     try (apply IHnode_eval in H0; apply H0).
-Qed.
+Qed. *)
 
 Lemma pathcond_extend : forall prog node1 node2 path2,
   (ancestor prog node1 node2 path2) ->
@@ -324,6 +324,15 @@ Proof.
   apply H. apply in_or_app. right. easy.
 Qed.
 
+Lemma path_head : forall prog parent child node2 path path2,
+  node_eval prog parent path ->
+  node_eval prog child (child :: path) ->
+  node_eval prog node2 path2 -> 
+  In parent path2 ->
+  ~ In child path2 ->
+  parent = node2.
+Proof. Admitted.
+
 Theorem property_2 : forall prog node1 node2 path1 path2, 
 (node_eval prog node1 path1) -> 
 (node_eval prog node2 path2) ->
@@ -341,7 +350,8 @@ Proof.
   induction H; intros.
     - apply base_path in H0. apply H1 in H0. apply H0.
     - apply IHnode_eval; auto.
-      + clear IHnode_eval. clear H. clear H3. intro Hc.
+      + clear IHnode_eval. clear H. clear H4. intro Hc.
+        assert (node = node2). { apply (path_head prog node node' node2 path path2); easy. }
       apply H2. right.
         apply node_path in H0.
         destruct path2 as [| h t]. destruct Hc.
