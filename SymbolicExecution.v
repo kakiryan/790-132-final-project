@@ -351,13 +351,10 @@ Proof.
     - apply base_path in H0. apply H1 in H0. apply H0.
     - apply IHnode_eval; auto.
       + clear IHnode_eval. clear H. clear H4. intro Hc.
-        assert (node = node2). { apply (path_head prog node node' node2 path path2); easy. }
-      apply H2. right.
-        apply node_path in H0.
-        destruct path2 as [| h t]. destruct Hc.
-        destruct Hc. unfold In in H1. apply not_or_and in H1.
-        destruct H1 as [H1 _]. destruct H1. apply H. 
-      + 
+        assert (node = node2). { apply (path_head prog node node' node2 path path2); easy. } rewrite <- H in H2. destruct H2.
+        right. apply (node_path prog). apply H3.
+        + intro Hc. destruct H2. right. apply Hc.
+    -
     (* - apply IHnode_eval. admit. intros HI. apply H2. right. apply HI.
       simpl in *. apply H3.
     -  *)
