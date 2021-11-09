@@ -252,19 +252,29 @@ Qed.
   - apply nil_path in H2. left. easy. easy.
   - apply nil_path in H2. left. easy. easy. *)
 
-Definition ancestor (prog: Program) (node1 node2: TreeNode) (path2: list TreeNode): Prop :=
-  node_eval prog node2 path2 /\ In node1 path2.
+(* Definition ancestor (prog: Program) (node1 node2: TreeNode) (path2: list TreeNode): Prop :=
+  node_eval prog node2 path2 /\ In node1 path2. *)
 
-Lemma ancestor_eval : forall prog node1 node2 path2,
-  ancestor prog node1 node2 path2 -> exists path1, node_eval prog node1 path1.
-Proof. Admitted.
+Definition ancestor (prog: Program) (node1 node2: TreeNode) : Prop :=
+  exists path2, node_eval prog node2 path2 /\ In node1 path2.
+
+Lemma ancestor_eval : forall prog node1 node2,
+  ancestor prog node1 node2 -> exists path1, node_eval prog node1 path1.
+Proof.
+  intros. destruct H as [path2 [H H0]]. remember H as E. clear HeqE.
+  induction H; destruct H0;
+  try (exists (node' :: path); rewrite <- H0; easy);
+  try (apply IHnode_eval; easy).
+  - exists [<<st, [], 0>>]. rewrite <- H. apply E_Empty.
+  - destruct H.
+Qed.
   (* intros. destruct H; induction H; destruct H0;
     try (exists path; rewrite <- H0; easy);
     try (apply IHnode_eval in H0; apply H0).
 Qed. *)
 
-Lemma pathcond_extend : forall prog node1 node2 path2,
-  (ancestor prog node1 node2 path2) ->
+Lemma pathcond_extend : forall prog node1 node2,
+  (ancestor prog node1 node2) ->
   exists path_subset, extractPathCond node2 = path_subset ++ extractPathCond node1.
 Proof. Admitted.
   (* intros. destruct H. induction H; destruct H0; try (rewrite <- H0);
@@ -283,12 +293,6 @@ Proof. Admitted.
   - apply IHnode_eval in H0. destruct H0 as [p Hp].
     exists (<[~sbe]> :: p). unfold node in Hp; simpl in *. rewrite Hp; reflexivity.
 Qed. *)
-
-(* Lemma path_extend : forall prog node1 node2 path1 path2,
-  node_eval prog node1 path1 ->
-  ancestor prog node1 node2 path2 ->
-  exists path_subset, path2 = path_subset ++ path1.
-Proof. Abort. *)
 
 Lemma path_extend : forall prog node node' path,
   node_eval prog node' (node' :: node :: path) ->
@@ -309,14 +313,14 @@ Proof.
     rewrite <- H3 in H4. apply H4.
 Qed.
 
-Theorem property_2_simpler : forall prog node1 node2 path2,
-  ancestor prog node1 node2 path2 ->
+Theorem property_2_simpler : forall prog node1 node2,
+  ancestor prog node1 node2 ->
   SAT ((extractPathCond node1) ++ (extractPathCond node2)).
 Proof.
   intros. remember H as H1. clear HeqH1.
   apply pathcond_extend in H1. destruct H1 as [p H0].
   rewrite H0. apply SAT_comm.
-  unfold ancestor in H. destruct H as [H _].
+  unfold ancestor in H. destruct H as [path2 [H _]].
   apply property_1 in H. rewrite H0 in H.
   apply SAT_terms in H. destruct H as [cs H].
   apply SAT_terms. exists cs; intros. apply in_app_or in H1.
@@ -324,33 +328,55 @@ Proof.
   apply H. apply in_or_app. right. easy.
 Qed.
 
-Lemma path_head : forall prog parent child node2 path path2,
-  node_eval prog parent path ->
-  node_eval prog child (child :: path) ->
-  node_eval prog node2 path2 -> 
-  In parent path2 ->
-  ~ In child path2 ->
-  parent = node2.
-Proof. Admitted.
+Lemma not_ancestor_not_path : forall prog node1 path1 node2 path2,
+  node_eval prog node1 path1 ->
+  node_eval prog node2 path2 ->
+  ~(ancestor prog node1 node2) ->
+  ~(ancestor prog node2 node1) ->
+  ~(In node1 path2) /\ ~(In node2 path1).
+Proof.
+  intros. unfold ancestor in *. split.
+  - intro. apply H1. exists path2. split.
+    apply H0. apply H3.
+  - intro. apply H2. exists path1. split.
+    apply H. apply H3.
+Qed.
+
+Lemma pc_ancestor : forall prog node1 node2 sbe,
+  ancestor prog node1 node2 ->
+  In sbe (extractPathCond node1) ->
+  In sbe (extractPathCond node2).
+Proof.
+  intros. destruct H as [path2 [H H1]]. induction H; destruct H1;
+  try (rewrite <- H in H0; simpl in H0; apply H0; apply H);
+  try (subst; apply H0);
+  try (simpl; right);
+  auto.
+Qed.
+
+
 
 Theorem property_2 : forall prog node1 node2 path1 path2, 
 (node_eval prog node1 path1) -> 
 (node_eval prog node2 path2) ->
-  ~(ancestor prog node1 node2 path2) ->
-  ~(ancestor prog node2 node1 path1) ->
+  ~(ancestor prog node1 node2) ->
+  ~(ancestor prog node2 node1) ->
   ~ (SAT (( extractPathCond node1) ++ (extractPathCond node2))).
 Proof.
-  intros. intros H4. unfold ancestor in H1. apply not_and_or in H1.
+  intros. intros H4.
   (** Since we have assumed that both nodes are in the relation, we need to
       unfold the ancestor definition to get that neither node is in the other's path. *)
-  destruct H1. apply H1. apply H0.
-  unfold ancestor in H2. apply not_and_or in H2.
-  destruct H2. apply H2. apply H. remember H as E. clear HeqE.
+  assert (~(In node1 path2) /\ ~(In node2 path1)).
+  { apply (not_ancestor_not_path prog node1 path1 node2 path2); auto. }
+  destruct H3.
+  (* apply SAT_terms in H4. destruct H4 as [cs H4]. *)
   (** Now we can proceed by induction on H. *)
   induction H; intros.
-    - apply base_path in H0. apply H1 in H0. apply H0.
+    - apply base_path in H0. apply H3 in H0. apply H0.
     - apply IHnode_eval; auto.
-      + clear IHnode_eval. clear H. clear H4. intro Hc.
+      + clear IHnode_eval. clear H4. intro Hc. destruct Hc.
+        induction pc.
+        * simpl in *.
         assert (node = node2). { apply (path_head prog node node' node2 path path2); easy. } rewrite <- H in H2. destruct H2.
         right. apply (node_path prog). apply H3.
         + intro Hc. destruct H2. right. apply Hc.
