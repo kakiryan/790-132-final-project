@@ -53,7 +53,7 @@ Inductive node_eval (prog: Program) : TreeNode -> list TreeNode -> Prop :=
   | E_Assign : forall x ie st pc n path,
     let se := (makeSymbolicInt st ie) in
     let node := <<st, pc, n>> in
-    let node' := <<(x, se) :: st, pc, n+1>> in
+    let node' := <<(x, se) :: st, pc, (nextInstruction (stmts prog) n)>> in
     (findStatement (stmts prog) n) = <{x := ie}> ->
     node_eval prog node path ->
     node_eval prog node' (node' :: path)
@@ -354,7 +354,34 @@ Proof.
   auto.
 Qed.
 
+Lemma unique_path_head : forall prog node1 node2 path,
+  node_eval prog node1 path ->
+  node_eval prog node2 path ->
+  node1 = node2.
+Proof.
+  intros. apply node_path_2 in H. apply node_path_2 in H0.
+  rewrite H in H0. easy.
+Qed.
 
+Lemma unique_child : forall prog parent path,
+  let stmt := (findStatement (stmts prog) (extractIndex parent)) in
+  ((exists n, stmt = <{Go_To n}>) \/
+  (exists x ie, stmt = <{x := ie}>)) ->
+  node_eval prog parent path ->
+  exists! child, node_eval prog child (child :: path).
+Proof.
+  intros. destruct H.
+  - destruct H as [n H]. destruct parent.
+    exists <<s, pc, n>>. split.
+    + simpl in *. admit.
+    + intros child Hchild.
+      inversion Hchild.
+      * apply base_path in H0. rewrite <- H3 in H0. destruct H0.
+      * simpl in *. assert (node = <<s, pc, index>>).
+        { apply (unique_path_head prog _ _ path); easy. }
+        simpl in *. subst. unfold node in H5. injection H5. intros.
+        subst. unfold stmt in H. rewrite H in H2. inversion H2.
+Admitted.
 
 Theorem property_2 : forall prog node1 node2 path1 path2, 
 (node_eval prog node1 path1) -> 
