@@ -1,8 +1,7 @@
 From Coq Require Import Strings.String.
 Require Import ZArith.
-Open Scope Z_scope.
+Open Scope nat_scope.
 Open Scope list_scope.
-(** From LF Require Import Maps. *)
 From Coq Require Import Lists.List.
 From Coq Require Import Bool.Bool.
 From Coq Require Import Logic.Classical_Pred_Type.
@@ -30,14 +29,6 @@ https://github.com/kakiryan/790-132-final-project *)
     Property 1: Path condition is never identically false. 
     Property 2: All leaf nodes in a symbolic execution tree are distinct. 
     Property 3: Symbolic execution is commutative. *)
-
-(* Declare Custom Entry com. *)
-  (*intros. induction tr.
-  - destruct i.
-
-    *  reflexivity. 
-    * simpl. reflexivity. 
-  - simpl. destruct i. destruct tr1. unfold treeDiff. unfold MAX_TREE_DEPTH. *)
 
 (** The following relation is our representation of symbolic execution of a program.
     It relates a given program, and a node corresponding to a particular statement,
@@ -205,14 +196,6 @@ Qed.*)
 
 (* ====================== Start: Proof of Property 2. ===================*)
 
-(* Lemma nil_path : forall prog node path,
-  node_eval prog node path ->
-  path = [] ->
-  node = <<(emptySt prog), nil, 0>>.
-Proof.
-  intros. induction H; try reflexivity; try discriminate.
-Qed. *)
-
 Lemma node_path : forall prog node path,
   node_eval prog node path ->
   In node path.
@@ -220,11 +203,13 @@ Proof.
   intros. induction H; left; easy.
 Qed.
 
-Lemma node_path_2 : forall prog node path,
+Lemma path_not_empty : forall prog node path,
   node_eval prog node path ->
-  nth 0%nat path <<emptySt prog, nil, 0>> = node.
+  exists tail, path = node :: tail.
 Proof.
-  intros; inversion H; reflexivity.
+  intros; inversion H;
+  try (exists nil; reflexivity);
+  try (exists path0; reflexivity).
 Qed.
 
 Lemma base_path : forall prog node path,
@@ -235,22 +220,6 @@ Proof.
   try (left; reflexivity);
   try (right; apply IHnode_eval).
 Qed.
-  
-  (** Version for path without current node at head. *)
-  (* intros remember H as H'. clear HeqH'. induction H;
-  (** Base case is a contradiction. *)
-  try easy. - 
-  (** Otherwise, we have two cases: either the parent
-      node is the root (with an empty path), or it's not
-      and we can apply the inductive hypothesis. *)
-  destruct path;
-  try (right; apply IHnode_eval; easy).
-  - apply nil_path in H1. left. easy. easy.
-  - apply nil_path in H3. left. easy. easy.
-  - apply nil_path in H2. left. easy. easy.
-  - apply nil_path in H1. left. easy. easy.
-  - apply nil_path in H2. left. easy. easy.
-  - apply nil_path in H2. left. easy. easy. *)
 
 (* Definition ancestor (prog: Program) (node1 node2: TreeNode) (path2: list TreeNode): Prop :=
   node_eval prog node2 path2 /\ In node1 path2. *)
@@ -268,10 +237,6 @@ Proof.
   - exists [<<st, [], 0>>]. rewrite <- H. apply E_Empty.
   - destruct H.
 Qed.
-  (* intros. destruct H; induction H; destruct H0;
-    try (exists path; rewrite <- H0; easy);
-    try (apply IHnode_eval in H0; apply H0).
-Qed. *)
 
 Lemma pathcond_extend : forall prog node1 node2 path2,
   (ancestor prog node1 node2 path2) ->
@@ -294,7 +259,7 @@ Proof. Admitted.
     exists (<[~sbe]> :: p). unfold node in Hp; simpl in *. rewrite Hp; reflexivity.
 Qed. *)
 
-Lemma path_extend : forall prog node node' path,
+(* Lemma path_extend : forall prog node node' path,
   node_eval prog node' (node' :: node :: path) ->
   node_eval prog node (node :: path).
 Proof.
@@ -303,7 +268,7 @@ Proof.
     apply node_path_2 in H4; simpl in H4;
     rewrite <- H4 in H5; apply H5).
   - subst. remember H3 as H4. clear HeqH4.
-    apply node_path_2 in H3. simpl in H3.
+    apply node_path_2 in H3. destruct H3. injection H0; intros.
     rewrite <- H3 in H4. apply H4.
   - subst. remember H5 as H6. clear HeqH6.
     apply node_path_2 in H5. simpl in H5.
@@ -311,7 +276,7 @@ Proof.
   - subst. remember H3 as H4. clear HeqH4.
     apply node_path_2 in H3. simpl in H3.
     rewrite <- H3 in H4. apply H4.
-Qed.
+Qed. *)
 
 Lemma not_ancestor_not_path : forall prog node1 path1 node2 path2,
   node_eval prog node1 path1 ->
@@ -345,7 +310,8 @@ Lemma unique_path_head : forall prog node1 node2 path,
   node1 = node2.
 Proof.
   intros. apply node_path_2 in H. apply node_path_2 in H0.
-  rewrite H in H0. easy.
+  destruct H. destruct H0.
+  rewrite H in H0. injection H0; intros; easy.
 Qed.
 
 Lemma unique_child : forall prog parent path,
@@ -367,6 +333,31 @@ Proof.
         simpl in *. subst. unfold parent in H5. injection H5. intros.
         subst. unfold stmt in H. rewrite H in H2. inversion H2.
 Admitted.
+
+Lemma pc_differ : forall prog node1 node2 path1 path2,
+  let pc1 := (extractPathCond node1) in
+  let pc2 := (extractPathCond node2) in
+  node_eval prog node1 path1 ->
+  node_eval prog node2 path2 ->
+  ~ ancestor prog node1 node2 path2 ->
+  ~ ancestor prog node2 node1 path1 ->
+  exists sbe, (In sbe pc1 /\ In <[~sbe]> pc2) \/
+    (In sbe pc2 /\ In <[~sbe]> pc1).
+Proof.
+  intros. unfold ancestor in H1. apply not_and_or in H1.
+  destruct H1. apply H1 in H0. destruct H0.
+  unfold ancestor in H2. apply not_and_or in H2.
+  destruct H2. apply H2 in H. destruct H. remember H as E. clear HeqE.
+
+  induction H.
+  - simpl in *. apply base_path in H0. apply H1 in H0. destruct H0.
+  - assert (exists! child', node_eval prog child' (child' :: path)).
+  { apply (unique_child _ parent _); try auto. right. exists x, ie; easy. }
+  destruct H4 as [child' H4]. destruct H4.
+
+  apply IHnode_eval; auto. admit. simpl in H2. apply not_or_and in H2.
+  easy.
+Abort.
 
 Theorem property_2 : forall prog node1 node2 path1 path2, 
 (node_eval prog node1 path1) -> 
@@ -395,7 +386,17 @@ Proof.
       apply (H6 child) in E. subst.
       assert (parent = node2).
       (** We know path2 = node2 :: tail, so then destruct H4 and show that parent has to be at the head or there's a contradiction with H1. *)
-      {  }
+      { destruct path2 as [|h t]. apply base_path in H0. destruct H0.
+        destruct H4.
+        - admit. (* easy case *)
+        - clear H. clear H2. admit.
+      }
+      rewrite <- H7 in H2. simpl in H2. apply not_or_and in H2.
+      destruct H2. apply node_path in H3. apply H8 in H3. destruct H3.
+      + simpl in H2. apply not_or_and in H2. destruct H2. auto.
+    - simpl in *. apply superset_SAT in H4. apply IHnode_eval; auto.
+      intro. clear IHnode_eval. clear H4. clear H5.
+      apply not_or_and in H2. destruct H2.
 
 
 (* ==================== End: Proof of Property 2 ===================== *)

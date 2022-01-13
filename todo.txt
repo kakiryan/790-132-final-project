@@ -1,4 +1,10 @@
 Things to do for project
 
-- General proofs
-- Write a lemma base node with empty state always in path 
+- Property 2
+- Property 3
+- Apply to something else
+
+- Comment and format
+
+Nice to have:
+- version of node_eval without paths and proof that it's equivalent
