@@ -6,7 +6,7 @@ From Coq Require Import Lists.List.
 From Coq Require Import Bool.Bool.
 From Coq Require Import Logic.Classical_Pred_Type.
 From Coq Require Import Logic.Classical_Prop.
-From Coq Require Import Structures.OrderedTypeEx.
+From Coq Require Import Structures.OrderedTypeEx. 
 From SE Require Export Model.
 Import ListNotations.
 Close Scope string_scope.
@@ -367,8 +367,11 @@ Lemma hope : forall prog node1 node2 path1 path2,
 Proof.
   intros. induction H.
   - left. apply (base_path prog node2). auto.
+  (*- right. apply IHnode_eval in H1. right. destruct H1 as [H5 | H6].
+    + admit.
+    +  *)
   - apply IHnode_eval in H1. destruct H1.
-    + clear IHnode_eval.
+    + left. admit.
     + right. right. auto.
   - unfold child in H1. simpl in H1. apply superset_SAT in H1.
     apply IHnode_eval in H1. destruct H1.
@@ -393,7 +396,7 @@ Abort.
   
   
   
-  remember H as E. clear HeqE.
+  (*remember H as E. clear HeqE.
   induction H.
   - intros. left. apply (base_path prog node2). apply H.
   - intro. induction H1; intros.
@@ -406,7 +409,7 @@ Abort.
       destruct H5.
       left. right. auto.
       admit.
-      right. right. apply H4.
+      right. right. apply H4.*)
 
 
 Axiom excluded_middle : forall P, P \/ ~P.
@@ -434,7 +437,7 @@ Proof.
       { apply excluded_middle. }
       destruct H5.
       + clear IHnode_eval.
-    apply IHnode_eval; auto.
+    (* apply IHnode_eval; auto.
       clear IHnode_eval. clear H4.
       + intro.
       + intro. assert (exists! child', node_eval prog child' (child' :: path)).
@@ -453,10 +456,80 @@ Proof.
       + simpl in H2. apply not_or_and in H2. destruct H2. auto.
     - simpl in *. apply superset_SAT in H4. apply IHnode_eval; auto.
       intro. clear IHnode_eval. clear H4. clear H5.
-      apply not_or_and in H2. destruct H2.
+      apply not_or_and in H2. destruct H2.*)
+Abort. 
 
 
 (* ==================== End: Proof of Property 2 ===================== *)
+
+(* ==================== Start: Proof of Property 3 ===================== *)
+
+Inductive concrete_eval (prog: Program) : ConcreteNode -> Prop :=
+  | CE_Empty:
+    forall cs,
+    concrete_eval prog {{cs, 0}}
+  
+  | CE_Assign : forall x ie cs n,
+    let parent := {{cs, n}} in
+    let result := inteval ie cs in
+    let child := {{(x, result) :: cs, (nextInstruction (stmts prog) n)}} in
+    (findStatement (stmts prog) n) = <{x := ie}> ->
+    concrete_eval prog parent ->
+    concrete_eval prog child 
+
+   | CE_IfThen : forall be then_body else_body cs n,
+    let parent := {{cs, n}} in
+    let child := {{cs, (n+1)}} in
+    (findStatement (stmts prog) n) = <{if be then then_body else else_body end}> ->
+    beval be cs = true -> 
+    concrete_eval prog parent ->
+    concrete_eval prog child
+
+  | CE_IfElse : forall be then_body else_body cs n,
+    let parent := {{cs, n}} in
+    let child :=  {{cs, (n + (progLength then_body))}} in
+    (findStatement (stmts prog) n) = <{if be then then_body else else_body end}> ->
+    beval be cs = false -> 
+    concrete_eval prog parent ->
+    concrete_eval prog child 
+
+   | CE_GoTo: forall pos cs n,
+    let parent := {{ cs, n}} in
+    let child := {{ cs, pos}} in
+    (findStatement (stmts prog) n) = <{go_to pos}> ->
+    concrete_eval prog parent ->
+    concrete_eval prog child
+
+  | CE_WhileBody: forall be body cs n,
+    let parent := {{ cs, n }} in
+    let child :=  {{ cs, (n + 1)}} in
+    (findStatement (stmts prog) n) = <{while be do body end}> ->
+    beval be cs = true -> 
+    concrete_eval prog parent ->
+    concrete_eval prog child
+
+ | CE_WhileSkip: forall be body cs n,
+    let parent := {{cs, n}} in
+    let child := {{cs, (n + (progLength body) + 1)}} in
+    (findStatement (stmts prog) n) = <{while be do body end}> ->
+    beval be cs = false -> 
+    concrete_eval prog parent ->
+    concrete_eval prog child.
+
+Fixpoint fillState (cs: concreteState) (st: state) : concreteState := 
+ match st with 
+  | nil => nil
+  | h::t => match h with
+      | (x,se) => (x, (substituteInt se cs)) :: (fillState cs t)
+      end
+  end.
+
+Theorem property_3 : forall prog st pc i path cs, 
+ let final_cs := fillState cs st in
+ let node := <<st, pc, i>> in
+ node_eval prog node path ->
+ eval_pc pc final_cs = true ->
+ concrete_eval prog {{final_cs, i}}.
 
 (* Setting up new variable names for example 2. *)
 Definition J: string := "J".

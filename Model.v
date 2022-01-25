@@ -4,7 +4,7 @@ Open Scope Z_scope.
 Open Scope list_scope.
 From Coq Require Import Lists.List.
 From Coq Require Import Bool.Bool.
-From Coq Require Import Structures.OrderedTypeEx.
+From Coq Require Import Structures.OrderedTypeEx. 
 Import ListNotations.
 
 Open Scope string_scope.
@@ -186,8 +186,13 @@ Qed.
     into the program. The index points to a particular statement in the program. *)
 Inductive TreeNode : Type :=
   | Node (s : state) (pc : PathCond) (index : nat).
+
+Inductive ConcreteNode: Type :=
+ | CNode (cs : concreteState) (index : nat).
   
 Notation "<< s , pc , i >>" := (Node s pc i).
+ 
+Notation "{{ cs , i }}" := (CNode cs i).
 
 Definition empty_node := <<nil, nil, 0>>.
 
@@ -207,6 +212,17 @@ Definition extractPathCond (n : TreeNode) : PathCond :=
   match n with 
   | <<_, pc, _>> => pc
   end.
+
+Definition extractConcreteState (n : ConcreteNode) : concreteState :=
+  match n with 
+  | {{cs, _}} => cs
+  end.
+
+Definition extractConcreteIndex (n : ConcreteNode) : nat :=
+  match n with 
+  | {{_, i}} => i
+  end.
+
 
 (** An ExecutionTree is either empty or a root node with left and right
     child trees. *)
