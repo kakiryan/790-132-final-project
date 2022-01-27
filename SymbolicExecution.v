@@ -524,12 +524,35 @@ Fixpoint fillState (cs: concreteState) (st: state) : concreteState :=
       end
   end.
 
-Theorem property_3 : forall prog st pc i path cs, 
- let final_cs := fillState cs st in
- let node := <<st, pc, i>> in
+Lemma yeehaw : forall ie st cs,
+let se := makeSymbolicInt st ie in
+(exists initial_cs, (fillState initial_cs st) = cs) ->
+(substituteInt se cs) = (inteval ie cs).
+Proof.
+intros. induction ie.
+- simpl. reflexivity.
+- simpl. rewrite IHie1. rewrite IHie2. reflexivity.
+- simpl. rewrite IHie1. rewrite IHie2. reflexivity.
+- simpl. rewrite IHie1. rewrite IHie2. reflexivity.
+- simpl. unfold se. simpl. induction cs.
+  * simpl. induction st.
+    --  simpl. reflexivity.
+    -- simpl.
+Admitted.
+
+Theorem property_3 : forall prog node path cs, 
+ let final_cs := fillState cs (extractState node) in
  node_eval prog node path ->
- eval_pc pc final_cs = true ->
- concrete_eval prog {{final_cs, i}}.
+ eval_pc (extractPathCond node) final_cs = true ->
+ concrete_eval prog {{final_cs, (extractIndex node)}}.
+Proof.
+intros. remember H as E. clear HeqE. induction H; intros.
+- simpl. apply CE_Empty.
+- unfold final_cs. simpl. apply (CE_Assign prog).
+- assert ( concrete_eval prog {{fillState cs (extractState parent), extractIndex parent}} ). 
+  { apply IHnode_eval. 
+    *  simpl. simpl in *.  } 
+Admitted.
 
 (* Setting up new variable names for example 2. *)
 Definition J: string := "J".
