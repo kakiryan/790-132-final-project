@@ -524,6 +524,7 @@ Fixpoint fillState (cs: concreteState) (st: state) : concreteState :=
       end
   end.
 
+
 Lemma int_exp_equiv : forall ie st initial_cs,
 let se := makeSymbolicInt st ie in
 let cs := fillState initial_cs st in
@@ -541,6 +542,35 @@ intros. induction ie.
     * apply IHst.
 Qed.
 
+Lemma bool_exp_equiv : forall be st inital_cs,
+let se := makeSymbolicBool st be in
+let cs := fillState inital_cs st in
+(substituteBool se inital_cs) = (beval be cs).
+Proof.
+intros. induction be.
+- simpl. reflexivity.
+- simpl. reflexivity.
+- simpl. rewrite IHbe. reflexivity.
+- simpl. assert ((substituteInt (makeSymbolicInt st n) inital_cs) = inteval n cs).
+ * apply int_exp_equiv.
+ * rewrite H. reflexivity.
+Qed. 
+
+(* LOL this is from class *)
+Theorem andb_true_elim2 : forall b c : bool,
+  andb b c = true -> c = true.
+Proof.
+  intros b c. 
+  - destruct c eqn:Ec.
+      + reflexivity.
+      + intros H. rewrite <- H. 
+      { destruct b eqn:Eb.
+        * reflexivity.
+        * reflexivity.
+      }
+  Qed.
+
+
 Theorem property_3 : forall prog node path cs, 
  let final_cs := fillState cs (extractState node) in
  node_eval prog node path ->
@@ -554,7 +584,12 @@ intros. remember H as E. clear HeqE. induction H; intros.
   assert (inteval ie (fillState cs st) = substituteInt se cs).
   { unfold se. symmetry. apply int_exp_equiv. }
   rewrite <- H2. apply H0. easy. easy.
-- 
+- unfold final_cs. apply IHnode_eval in H3. 
+  apply (CE_IfThen _ be then_body else_body) in H3. simpl in *. 
+  * easy. 
+  * easy. 
+  * simpl. rewrite <- bool_exp_equiv. simpl. admit.
+  * simpl. simpl in H0. apply andb_true_elim2 in H0. apply H0.
 Admitted.
 
 (* Setting up new variable names for example 2. *)
