@@ -524,34 +524,37 @@ Fixpoint fillState (cs: concreteState) (st: state) : concreteState :=
       end
   end.
 
-Lemma yeehaw : forall ie st cs,
+Lemma int_exp_equiv : forall ie st initial_cs,
 let se := makeSymbolicInt st ie in
-(exists initial_cs, (fillState initial_cs st) = cs) ->
-(substituteInt se cs) = (inteval ie cs).
+let cs := fillState initial_cs st in
+(substituteInt se initial_cs) = (inteval ie cs).
 Proof.
 intros. induction ie.
 - simpl. reflexivity.
 - simpl. rewrite IHie1. rewrite IHie2. reflexivity.
 - simpl. rewrite IHie1. rewrite IHie2. reflexivity.
 - simpl. rewrite IHie1. rewrite IHie2. reflexivity.
-- simpl. unfold se. simpl. induction cs.
-  * simpl. induction st.
-    --  simpl. reflexivity.
-    -- simpl.
-Admitted.
+- simpl in *. unfold se. simpl. induction st.
+  + simpl in *. reflexivity.
+  + destruct a as [k v]. simpl. destruct (string_dec k x).
+    * reflexivity.
+    * apply IHst.
+Qed.
 
 Theorem property_3 : forall prog node path cs, 
  let final_cs := fillState cs (extractState node) in
  node_eval prog node path ->
- eval_pc (extractPathCond node) final_cs = true ->
+ eval_pc (extractPathCond node) cs = true ->
  concrete_eval prog {{final_cs, (extractIndex node)}}.
 Proof.
 intros. remember H as E. clear HeqE. induction H; intros.
 - simpl. apply CE_Empty.
-- unfold final_cs. simpl. apply (CE_Assign prog).
-- assert ( concrete_eval prog {{fillState cs (extractState parent), extractIndex parent}} ). 
-  { apply IHnode_eval. 
-    *  simpl. simpl in *.  } 
+- unfold final_cs. simpl in *. apply IHnode_eval in H0. clear IHnode_eval.
+  apply (CE_Assign _ x ie) in H0.
+  assert (inteval ie (fillState cs st) = substituteInt se cs).
+  { unfold se. symmetry. apply int_exp_equiv. }
+  rewrite <- H2. apply H0. easy. easy.
+- 
 Admitted.
 
 (* Setting up new variable names for example 2. *)
