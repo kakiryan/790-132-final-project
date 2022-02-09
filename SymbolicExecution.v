@@ -588,8 +588,11 @@ intros. remember H as E. clear HeqE. induction H; intros.
   apply (CE_IfThen _ be then_body else_body) in H3. simpl in *. 
   * easy. 
   * easy. 
-  * simpl. rewrite <- bool_exp_equiv. simpl. admit.
+  * simpl. rewrite <- bool_exp_equiv. clear IHnode_eval.
+    simpl in H0. rewrite andb_comm in H0.
+    apply andb_true_elim2 in H0. easy.
   * simpl. simpl in H0. apply andb_true_elim2 in H0. apply H0.
+- 
 Admitted.
 
 (* Setting up new variable names for example 2. *)
