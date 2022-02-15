@@ -144,8 +144,6 @@ Definition C: string := "C".
 Definition sC: SymbolicExp := Symbol C.
 Definition X: string := "X".
 Definition Y: string := "Y".
-Definition Z: string := "Z".
-
 (** The empty state will map each parameter to its symbolic variable, and
     each local variable to the default value of 0. *)
 Definition empty_st := [(A, sA); (B, sB); (C, sC)].

@@ -464,57 +464,73 @@ Abort.
 
 (* ==================== Start: Proof of Property 3 ===================== *)
 
-Inductive concrete_eval (prog: Program) : ConcreteNode -> Prop :=
+Check Z.
+
+Fixpoint populateParams (params : list string) (args : list Z) : concreteState :=
+  match params with
+  | nil => nil
+  | h :: t =>
+    match args with
+    | nil => (h, 0) :: (populateParams t nil)
+    | h' :: t' => (h, h') :: (populateParams t t')
+    end
+  end.
+
+Fixpoint populate (prog : Program) (args : list Z) : concreteState :=
+  match prog with
+  | P stmts params => populateParams params args
+
+Inductive concrete_eval (prog: Program) : ConcreteNode -> list ConcreteNode -> Prop :=
   | CE_Empty:
     forall cs,
-    concrete_eval prog {{cs, 0}}
+    concrete_eval prog {{cs, 0}} [{{cs, 0}}]
   
-  | CE_Assign : forall x ie cs n,
+  | CE_Assign : forall x ie cs n path,
     let parent := {{cs, n}} in
     let result := inteval ie cs in
     let child := {{(x, result) :: cs, (nextInstruction (stmts prog) n)}} in
     (findStatement (stmts prog) n) = <{x := ie}> ->
-    concrete_eval prog parent ->
-    concrete_eval prog child 
+    concrete_eval prog parent path ->
+    concrete_eval prog child (child :: path)
 
-   | CE_IfThen : forall be then_body else_body cs n,
+   | CE_IfThen : forall be then_body else_body cs n path,
     let parent := {{cs, n}} in
     let child := {{cs, (n+1)}} in
     (findStatement (stmts prog) n) = <{if be then then_body else else_body end}> ->
     beval be cs = true -> 
-    concrete_eval prog parent ->
-    concrete_eval prog child
+    concrete_eval prog parent path ->
+    concrete_eval prog child (child :: path)
 
-  | CE_IfElse : forall be then_body else_body cs n,
+  | CE_IfElse : forall be then_body else_body cs n path,
     let parent := {{cs, n}} in
     let child :=  {{cs, (n + (progLength then_body))}} in
     (findStatement (stmts prog) n) = <{if be then then_body else else_body end}> ->
     beval be cs = false -> 
-    concrete_eval prog parent ->
-    concrete_eval prog child 
+    concrete_eval prog parent path ->
+    concrete_eval prog child (child :: path) 
 
-   | CE_GoTo: forall pos cs n,
+   | CE_GoTo: forall pos cs n path,
     let parent := {{ cs, n}} in
     let child := {{ cs, pos}} in
     (findStatement (stmts prog) n) = <{go_to pos}> ->
-    concrete_eval prog parent ->
-    concrete_eval prog child
+    concrete_eval prog parent path ->
+    concrete_eval prog child (child :: path)
 
-  | CE_WhileBody: forall be body cs n,
+  | CE_WhileBody: forall be body cs n path,
     let parent := {{ cs, n }} in
     let child :=  {{ cs, (n + 1)}} in
     (findStatement (stmts prog) n) = <{while be do body end}> ->
     beval be cs = true -> 
-    concrete_eval prog parent ->
-    concrete_eval prog child
+    concrete_eval prog parent path ->
+    concrete_eval prog child (child :: path)
 
- | CE_WhileSkip: forall be body cs n,
+ | CE_WhileSkip: forall be body cs n path,
     let parent := {{cs, n}} in
     let child := {{cs, (n + (progLength body) + 1)}} in
     (findStatement (stmts prog) n) = <{while be do body end}> ->
     beval be cs = false -> 
-    concrete_eval prog parent ->
-    concrete_eval prog child.
+    concrete_eval prog parent path ->
+    concrete_eval prog child (child :: path).
 
 Fixpoint fillState (cs: concreteState) (st: state) : concreteState := 
  match st with 
@@ -570,15 +586,51 @@ Proof.
       }
   Qed.
 
+(* Theorem property_3 : forall prog node path cs final_cs' n', 
+ let final_cs := fillState cs (extractState node) in
+ node_eval prog node path ->
+ eval_pc (extractPathCond node) cs = true ->
+ concrete_eval prog {{final_cs' n'}}
+ *)
+
+Fixpoint initial_state (cpath : list ConcreteNode) : concreteState :=
+  match cpath with
+  | nil => nil
+  | h :: t => match t with
+    | nil => extractConcreteState h
+    | h' :: t' => (initial_state t)
+    end
+  end.
+
+Lemma fillEmptySt : forall prog cs,
+  fillState cs (emptySt prog) = cs.
+Proof.
+  intros. destruct prog. induction params.
+  - simpl.
+
+Theorem property_3 : forall prog node path cs cpath final_cs' n',
+  let final_cs := fillState cs (extractState node) in
+  node_eval prog node path ->
+  eval_pc (extractPathCond node) cs = true ->
+  concrete_eval prog {{final_cs', n'}} cpath ->
+  initial_state cpath = cs ->
+  length path = length cpath ->
+  final_cs = final_cs'.
+Proof.
+  intros. induction H.
+  - simpl in *. destruct cpath.
+    + inversion H3.
+    + destruct cpath.
+      * simpl in *.
 
 Theorem property_3 : forall prog node path cs, 
  let final_cs := fillState cs (extractState node) in
  node_eval prog node path ->
  eval_pc (extractPathCond node) cs = true ->
- concrete_eval prog {{final_cs, (extractIndex node)}}.
+ exists cpath, concrete_eval prog {{final_cs, (extractIndex node)}} cpath.
 Proof.
 intros. remember H as E. clear HeqE. induction H; intros.
-- simpl. apply CE_Empty.
+- simpl. exists [{{final_cs, 0}}]. apply CE_Empty.
 - unfold final_cs. simpl in *. apply IHnode_eval in H0. clear IHnode_eval.
   apply (CE_Assign _ x ie) in H0.
   assert (inteval ie (fillState cs st) = substituteInt se cs).
