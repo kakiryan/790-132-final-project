@@ -476,13 +476,15 @@ Fixpoint populateParams (params : list string) (args : list Z) : concreteState :
     end
   end.
 
-Fixpoint populate (prog : Program) (args : list Z) : concreteState :=
+Definition populate (prog : Program) (args : list Z) : concreteState :=
   match prog with
   | P stmts params => populateParams params args
+ end.
 
 Inductive concrete_eval (prog: Program) : ConcreteNode -> list ConcreteNode -> Prop :=
   | CE_Empty:
-    forall cs,
+    forall args,
+    let cs := populate prog args in 
     concrete_eval prog {{cs, 0}} [{{cs, 0}}]
   
   | CE_Assign : forall x ie cs n path,
@@ -602,11 +604,14 @@ Fixpoint initial_state (cpath : list ConcreteNode) : concreteState :=
     end
   end.
 
-Lemma fillEmptySt : forall prog cs,
+Lemma fillEmptySt : forall prog args,
+  let cs := populate prog args in 
   fillState cs (emptySt prog) = cs.
 Proof.
   intros. destruct prog. induction params.
-  - simpl.
+  - simpl. unfold cs. simpl in *. reflexivity.
+  - simpl in *. destruct args.
+    * unfold cs. injection. rewrite <- IHparams. 
 
 Theorem property_3 : forall prog node path cs cpath final_cs' n',
   let final_cs := fillState cs (extractState node) in

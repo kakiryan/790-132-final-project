@@ -162,9 +162,9 @@ Qed.
 
 (** When we evaluate ex_pc with this trivial path condition, we get the boolean
     true. *)
-Definition SAT_assign_ex_1: concreteState := 
+(*Definition SAT_assign_ex_1: concreteState := 
   [(A, 1); (B, 2); (C, 1); (X, 3); (Y, 3); (Z, 4)].
-Compute eval_pc ex_pc SAT_assign_ex_1.
+Compute eval_pc ex_pc SAT_assign_ex_1.*)
 
 
 (** For another example, we prove that the path condition
