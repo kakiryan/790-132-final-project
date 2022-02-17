@@ -608,17 +608,28 @@ Lemma fillEmptySt : forall prog args,
   let cs := populate prog args in 
   fillState cs (emptySt prog) = cs.
 Proof.
-  intros. destruct prog. induction params.
+  intros. generalize dependent args. destruct prog. induction params; intros.
+  - reflexivity.
+  - destruct args.
+    + unfold cs in *. simpl in *. destruct (string_dec a a).
+      * assert (fillState ((a, 0) :: populateParams params []) (paramsToEmptySt params) =
+                populateParams params []).
+      { clear e. 
+
+induction params.
   - simpl. unfold cs. simpl in *. reflexivity.
-  - simpl in *. destruct args.
+  - simpl in *. unfold cs. unfold applyCState. simpl. destruct args.
     * unfold cs. injection. rewrite <- IHparams. 
 
 Theorem property_3 : forall prog node path cs cpath final_cs' n',
   let final_cs := fillState cs (extractState node) in
   node_eval prog node path ->
+  (* depends on property 2? *)
   eval_pc (extractPathCond node) cs = true ->
+
   concrete_eval prog {{final_cs', n'}} cpath ->
   initial_state cpath = cs ->
+
   length path = length cpath ->
   final_cs = final_cs'.
 Proof.

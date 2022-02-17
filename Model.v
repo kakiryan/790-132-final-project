@@ -272,7 +272,7 @@ Open Scope string_scope.
 Fixpoint paramsToEmptySt (params: list string) : state :=
   match params with
   | nil => nil
-  | h :: t => (h, Symbol("s" ++ h)) :: (paramsToEmptySt t)
+  | h :: t => (h, Symbol h) :: (paramsToEmptySt t)
   end.
 
 Definition emptySt (prog: Program) : state :=
