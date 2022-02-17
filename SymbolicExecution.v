@@ -620,17 +620,26 @@ induction params.
   - simpl. unfold cs. simpl in *. reflexivity.
   - simpl in *. unfold cs. unfold applyCState. simpl. destruct args.
     * unfold cs. injection. rewrite <- IHparams. 
+Abort.
 
 Theorem property_3 : forall prog node path cs cpath final_cs' n',
+  (* with some concrete state that we get by symbolically executing and then
+  substituting...*)
+  (* this may depend on property 2? *)
   let final_cs := fillState cs (extractState node) in
   node_eval prog node path ->
-  (* depends on property 2? *)
+  (*... and assuming the operations are valid/the path is satisfiable ..**)
   eval_pc (extractPathCond node) cs = true ->
-
+  (*... then we have some concrete node in the relation with internal final_cs'
+  that is the result of taking some concrete path, cpath. **)
   concrete_eval prog {{final_cs', n'}} cpath ->
+  (* additionally, the inital state of our concrete path is equal to the same 
+   concrete state as before.. *)
   initial_state cpath = cs ->
-
+  (* ... if the lengths of the paths are the same ... *)
   length path = length cpath ->
+  (* then the final concrete state that we arrived at via substitution is the 
+   same one we arrived at via directly executing the program concretely. *)
   final_cs = final_cs'.
 Proof.
   intros. induction H.
