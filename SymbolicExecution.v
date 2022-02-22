@@ -604,23 +604,54 @@ Fixpoint initial_state (cpath : list ConcreteNode) : concreteState :=
     end
   end.
 
-Lemma fillEmptySt : forall prog args,
-  let cs := populate prog args in 
+Lemma fillEmptySt : forall prog cs,
   fillState cs (emptySt prog) = cs.
-Proof.
-  intros. generalize dependent args. destruct prog. induction params; intros.
+Proof. Admitted.
+
+(*  intros. generalize dependent args. destruct prog. induction params; intros.
   - reflexivity.
   - destruct args.
     + unfold cs in *. simpl in *. destruct (string_dec a a).
       * assert (fillState ((a, 0) :: populateParams params []) (paramsToEmptySt params) =
                 populateParams params []).
-      { clear e. 
+      { clear e. Admitted. *)
 
-induction params.
+(* induction params.
   - simpl. unfold cs. simpl in *. reflexivity.
   - simpl in *. unfold cs. unfold applyCState. simpl. destruct args.
     * unfold cs. injection. rewrite <- IHparams. 
-Abort.
+Abort. *)
+
+Lemma concrete_path_head : forall prog cnode cpath,
+  concrete_eval prog cnode cpath ->
+  exists tail, cpath = cnode :: tail.
+Proof.
+  intros. inversion H; try (exists path; reflexivity).
+  - exists nil. reflexivity.
+Qed.
+
+Lemma prog_index_match : forall prog node path cs cpath final_cs' n',
+  node_eval prog node path ->
+  concrete_eval prog {{final_cs', n'}} cpath ->
+  initial_state cpath = cs ->
+  eval_pc (extractPathCond node) cs = true ->
+  length path = length cpath ->
+  n' = extractIndex node.
+Proof.
+  intros. generalize dependent cs. generalize dependent cpath.
+  generalize dependent n'. generalize dependent final_cs'.
+  induction H; intros.
+  - simpl in *. clear H2. admit. (* destruct cpath. inversion H3.
+    destruct cpath. inversion H0; try reflexivity.
+    apply (concrete_path_head prog parent []) in H7. inversion H7. *)
+  - inversion H1.
+    + subst. admit.
+    + subst. assert (n0 = n).
+      { simpl in H3. injection H3; intros.
+        apply (IHnode_eval cs0 n0 path0 H9 H2 (initial_state path0)).
+        reflexivity. simpl. admit. }
+      subst. reflexivity.
+    + subst.
 
 Theorem property_3 : forall prog node path cs cpath final_cs' n',
   (* with some concrete state that we get by symbolically executing and then
@@ -642,11 +673,18 @@ Theorem property_3 : forall prog node path cs cpath final_cs' n',
    same one we arrived at via directly executing the program concretely. *)
   final_cs = final_cs'.
 Proof.
-  intros. induction H.
-  - simpl in *. destruct cpath.
-    + inversion H3.
-    + destruct cpath.
-      * simpl in *.
+  intros. generalize dependent cs. generalize dependent cpath. 
+  generalize dependent final_cs'. generalize dependent n'.
+  remember H as E. clear HeqE. induction H; intros.
+  - simpl in *. destruct cpath. inversion H3.
+    destruct cpath.
+      + simpl in *.
+        apply (concrete_path_head prog {{final_cs', n'}} [c]) in H1.
+        destruct H1. injection H; intros. rewrite H4 in H2. simpl in *.
+        subst. clear H. clear H0. clear H3.
+        unfold final_cs. unfold st. apply fillEmptySt.
+      + simpl in *. inversion H3.
+  - apply (IHnode_eval H0 n' final_cs' ({{final_cs', n'}} :: cpath)).
 
 Theorem property_3 : forall prog node path cs, 
  let final_cs := fillState cs (extractState node) in
