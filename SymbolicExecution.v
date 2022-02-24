@@ -641,9 +641,17 @@ Proof.
   intros. generalize dependent cs. generalize dependent cpath.
   generalize dependent n'. generalize dependent final_cs'.
   induction H; intros.
-  - simpl in *. clear H2. admit. (* destruct cpath. inversion H3.
-    destruct cpath. inversion H0; try reflexivity.
-    apply (concrete_path_head prog parent []) in H7. inversion H7. *)
+  - simpl in *. clear H2. destruct cpath. inversion H3.
+    destruct cpath.
+    inversion H0.
+    + reflexivity.
+    + apply concrete_path_head in H7. destruct H7. discriminate.
+    + apply concrete_path_head in H8. destruct H8. discriminate.
+    + apply concrete_path_head in H8. destruct H8. discriminate.
+    + apply concrete_path_head in H7. destruct H7. discriminate.
+    + apply concrete_path_head in H8. destruct H8. discriminate.
+    + apply concrete_path_head in H8. destruct H8. discriminate.
+    + discriminate.
   - inversion H1.
     + subst. admit.
     + subst. assert (n0 = n).
@@ -651,7 +659,7 @@ Proof.
         apply (IHnode_eval cs0 n0 path0 H9 H2 (initial_state path0)).
         reflexivity. simpl. admit. }
       subst. reflexivity.
-    + subst.
+    + subst. Abort.
 
 Theorem property_3 : forall prog node path cs cpath final_cs' n',
   (* with some concrete state that we get by symbolically executing and then
@@ -684,7 +692,7 @@ Proof.
         subst. clear H. clear H0. clear H3.
         unfold final_cs. unfold st. apply fillEmptySt.
       + simpl in *. inversion H3.
-  - apply (IHnode_eval H0 n' final_cs' ({{final_cs', n'}} :: cpath)).
+  - apply (IHnode_eval H0 n final_cs' ({{final_cs', n'}} :: cpath)).
 
 Theorem property_3 : forall prog node path cs, 
  let final_cs := fillState cs (extractState node) in
