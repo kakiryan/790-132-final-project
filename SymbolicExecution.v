@@ -630,6 +630,52 @@ Proof.
   - exists nil. reflexivity.
 Qed.
 
+Ltac wrong H := apply concrete_path_head in H; destruct H; discriminate.
+
+Ltac auto_wrong :=
+  match goal with
+    H: concrete_eval ?P ?N []
+    |- _ => wrong H
+  end.
+
+Lemma initial_state_match : forall prog parent child cpath,
+  concrete_eval prog parent cpath ->
+  concrete_eval prog child (child :: cpath) ->
+  initial_state cpath = initial_state (child :: cpath).
+Proof.
+  intros. inversion H; try reflexivity.
+Qed.
+
+Ltac wrong_ind IH A B C D final_cs' n0 path0 prog parent0 child1 :=
+  apply (IH final_cs' n0 path0 A B (initial_state path0));
+  try reflexivity; simpl;
+  apply (initial_state_match prog parent0 child1 path0 A) in C;
+  rewrite C; apply D.
+
+Ltac wrong_ind_auto :=
+  match goal with
+  | IH: forall (final_cs' : concreteState) (n' : nat)
+      (cpath : list ConcreteNode),
+       concrete_eval ?prog {{final_cs', n'}} cpath ->
+       Datatypes.length ?path = Datatypes.length cpath ->
+       forall cs : concreteState,
+       initial_state cpath = cs ->
+       eval_pc (extractPathCond ?parent) cs = true -> n' = extractIndex ?parent,
+    A: concrete_eval ?prog ?parent0 ?path0,
+    B: Datatypes.length ?path = Datatypes.length ?path0,
+    C: concrete_eval ?prog ?child1 (?child1 :: ?path0),
+    D: eval_pc (extractPathCond ?child) (initial_state (?child1 :: ?path0)) = true,
+    n0: nat,
+    final_cs': concreteState,
+    path0: list ConcreteNode,
+    prog: Program,
+    parent0: ConcreteNode,
+    child1: ConcreteNode
+    
+  |- _ => wrong_ind IH A B C D final_cs' n0 path0 prog parent0 child1
+  end.
+  
+
 Lemma prog_index_match : forall prog node path cs cpath final_cs' n',
   node_eval prog node path ->
   concrete_eval prog {{final_cs', n'}} cpath ->
@@ -643,23 +689,27 @@ Proof.
   induction H; intros.
   - simpl in *. clear H2. destruct cpath. inversion H3.
     destruct cpath.
-    inversion H0.
-    + reflexivity.
-    + apply concrete_path_head in H7. destruct H7. discriminate.
-    + apply concrete_path_head in H8. destruct H8. discriminate.
-    + apply concrete_path_head in H8. destruct H8. discriminate.
-    + apply concrete_path_head in H7. destruct H7. discriminate.
-    + apply concrete_path_head in H8. destruct H8. discriminate.
-    + apply concrete_path_head in H8. destruct H8. discriminate.
-    + discriminate.
+    + inversion H0; try auto_wrong.
+      * reflexivity.
+    + inversion H3.
   - inversion H1.
-    + subst. admit.
+    + subst. simpl in *. injection H3; intros.
+      apply (path_not_empty prog parent path) in H0. destruct H0.
+      subst. inversion H2.
     + subst. assert (n0 = n).
       { simpl in H3. injection H3; intros.
         apply (IHnode_eval cs0 n0 path0 H9 H2 (initial_state path0)).
-        reflexivity. simpl. admit. }
-      subst. reflexivity.
-    + subst. Abort.
+         Check IHnode_eval.
+        reflexivity. simpl.
+        apply (initial_state_match prog parent0 child0 path0 H9) in H1.
+        rewrite H1. apply H4. }
+      subst. simpl in *. reflexivity.
+    + subst; assert (n0 = n);
+      simpl in H3; injection H3; intro Hnew; fold child1 in H1.
+      wrong_ind_auto. subst n. rewrite H7 in H. discriminate.
+    + subst; assert (n0 = n);
+      simpl in H3; injection H3; intro Hnew; fold child1 in H1.
+      wrong_ind_auto; subst; rewrite H7 in H; discriminate.
 
 Theorem property_3 : forall prog node path cs cpath final_cs' n',
   (* with some concrete state that we get by symbolically executing and then
