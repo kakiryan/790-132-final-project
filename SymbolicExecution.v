@@ -692,24 +692,25 @@ Proof.
     + inversion H0; try auto_wrong.
       * reflexivity.
     + inversion H3.
-  - inversion H1.
+  - inversion H1;
+      try (subst; assert (n0 = n);
+      simpl in H3; injection H3; intro Hnew; fold child1 in H1;
+      try wrong_ind_auto; subst; rewrite H7 in H; discriminate).
     + subst. simpl in *. injection H3; intros.
       apply (path_not_empty prog parent path) in H0. destruct H0.
       subst. inversion H2.
-    + subst. assert (n0 = n).
-      { simpl in H3. injection H3; intros.
-        apply (IHnode_eval cs0 n0 path0 H9 H2 (initial_state path0)).
-         Check IHnode_eval.
-        reflexivity. simpl.
-        apply (initial_state_match prog parent0 child0 path0 H9) in H1.
-        rewrite H1. apply H4. }
-      subst. simpl in *. reflexivity.
     + subst; assert (n0 = n);
-      simpl in H3; injection H3; intro Hnew; fold child1 in H1.
-      wrong_ind_auto. subst n. rewrite H7 in H. discriminate.
+      simpl in H3; injection H3; intro Hnew; fold child0 in H1;
+      try wrong_ind_auto; subst; simpl in *; reflexivity.
+  - inversion H3.
+    + subst. simpl in *. injection H4; intros.
+      apply (path_not_empty prog parent path) in H2. destruct H2.
+      subst. inversion H5.
     + subst; assert (n0 = n);
-      simpl in H3; injection H3; intro Hnew; fold child1 in H1.
-      wrong_ind_auto; subst; rewrite H7 in H; discriminate.
+      simpl in H4; injection H4; intro Hnew. fold child0 in H3.
+      try wrong_ind_auto.
+
+Admitted.
 
 Theorem property_3 : forall prog node path cs cpath final_cs' n',
   (* with some concrete state that we get by symbolically executing and then
@@ -743,6 +744,11 @@ Proof.
         unfold final_cs. unfold st. apply fillEmptySt.
       + simpl in *. inversion H3.
   - apply (IHnode_eval H0 n final_cs' ({{final_cs', n'}} :: cpath)).
+
+
+
+
+
 
 Theorem property_3 : forall prog node path cs, 
  let final_cs := fillState cs (extractState node) in
