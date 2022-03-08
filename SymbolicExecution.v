@@ -693,12 +693,18 @@ Proof.
       * reflexivity.
     + inversion H3.
   - inversion H1;
+      (* For all inductive cases where constructors don't match, we can
+         find the same contradiction. *)
       try (subst; assert (n0 = n);
       simpl in H3; injection H3; intro Hnew; fold child1 in H1;
       try wrong_ind_auto; subst; rewrite H7 in H; discriminate).
+      (* For the concrete_eval base case, we can show that the
+         path is too short. *)
     + subst. simpl in *. injection H3; intros.
       apply (path_not_empty prog parent path) in H0. destruct H0.
       subst. inversion H2.
+      (* When the constructors match, applying the IH doesn't create
+         a contradiction in the context. *)
     + subst; assert (n0 = n);
       simpl in H3; injection H3; intro Hnew; fold child0 in H1;
       try wrong_ind_auto; subst; simpl in *; reflexivity.
