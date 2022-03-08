@@ -630,6 +630,17 @@ Proof.
   - exists nil. reflexivity.
 Qed.
 
+Lemma superset_pc_true : forall pc cs sbe, 
+eval_pc (sbe :: pc) cs = true ->
+eval_pc pc cs = true. 
+Proof. 
+intros. induction pc.
+- simpl. reflexivity.
+- simpl in H. simpl. destruct (substituteBool sbe cs).
+  * simpl in H. apply H.
+  * discriminate.
+Qed.
+
 Ltac wrong H := apply concrete_path_head in H; destruct H; discriminate.
 
 Ltac auto_wrong :=
@@ -650,7 +661,7 @@ Ltac wrong_ind IH A B C D final_cs' n0 path0 prog parent0 child1 :=
   apply (IH final_cs' n0 path0 A B (initial_state path0));
   try reflexivity; simpl;
   apply (initial_state_match prog parent0 child1 path0 A) in C;
-  rewrite C; apply D.
+  rewrite C; try (apply superset_pc_true in D); apply D.
 
 Ltac wrong_ind_auto :=
   match goal with
@@ -663,16 +674,16 @@ Ltac wrong_ind_auto :=
        eval_pc (extractPathCond ?parent) cs = true -> n' = extractIndex ?parent,
     A: concrete_eval ?prog ?parent0 ?path0,
     B: Datatypes.length ?path = Datatypes.length ?path0,
-    C: concrete_eval ?prog ?child1 (?child1 :: ?path0),
-    D: eval_pc (extractPathCond ?child) (initial_state (?child1 :: ?path0)) = true,
+    C: concrete_eval ?prog ?child0 (?child0 :: ?path0),
+    D: eval_pc (extractPathCond ?child) (initial_state (?child0 :: ?path0)) = true,
     n0: nat,
     final_cs': concreteState,
     path0: list ConcreteNode,
     prog: Program,
     parent0: ConcreteNode,
-    child1: ConcreteNode
+    child0: ConcreteNode
     
-  |- _ => wrong_ind IH A B C D final_cs' n0 path0 prog parent0 child1
+  |- _ => wrong_ind IH A B C D final_cs' n0 path0 prog parent0 child0
   end.
   
 
@@ -705,16 +716,24 @@ Proof.
       subst. inversion H2.
       (* When the constructors match, applying the IH doesn't create
          a contradiction in the context. *)
-    + subst; assert (n0 = n);
+    +subst; assert (n0 = n);
       simpl in H3; injection H3; intro Hnew; fold child0 in H1;
       try wrong_ind_auto; subst; simpl in *; reflexivity.
-  - inversion H3.
+  - inversion H3;
+     try (subst; assert (n0 = n);
+      simpl in H4; injection H4; intro Hnew; fold child0 in H3; 
+      try wrong_ind_auto; subst; rewrite H9 in H; discriminate).
     + subst. simpl in *. injection H4; intros.
       apply (path_not_empty prog parent path) in H2. destruct H2.
       subst. inversion H5.
+     (* true case *)
     + subst; assert (n0 = n);
-      simpl in H4; injection H4; intro Hnew. fold child0 in H3.
-      try wrong_ind_auto.
+      simpl in H4; injection H4; intro Hnew; fold child1 in H3; 
+      try wrong_ind_auto. subst. unfold child. reflexivity.
+    + subst; assert (n0 = n);
+      simpl in H4; injection H4; intro Hnew; fold child1 in H3; 
+      try wrong_ind_auto. subst. 
+
 
 Admitted.
 
@@ -749,7 +768,13 @@ Proof.
         subst. clear H. clear H0. clear H3.
         unfold final_cs. unfold st. apply fillEmptySt.
       + simpl in *. inversion H3.
-  - apply (IHnode_eval H0 n final_cs' ({{final_cs', n'}} :: cpath)).
+  - inversion H1. 
+    + subst. destruct path.
+      * apply path_not_empty in H0. destruct H0. discriminate.
+      * simpl in H3. discriminate.
+    + assert (n0 = extractIndex parent). 
+      { apply(prog_index_match prog parent path cs path0 cs0 n0); auto. 
+      subst cpath. rewrite (initial_state_match prog parent0 child0 path0 H9 H1) in H4. } apply (IHnode_eval H0 n final_cs' ({{final_cs', n'}} :: cpath)).
 
 
 
