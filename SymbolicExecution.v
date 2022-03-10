@@ -773,8 +773,26 @@ Proof.
       * apply path_not_empty in H0. destruct H0. discriminate.
       * simpl in H3. discriminate.
     + assert (n0 = extractIndex parent). 
-      { apply(prog_index_match prog parent path cs path0 cs0 n0); auto. 
-      subst cpath. rewrite (initial_state_match prog parent0 child0 path0 H9 H1) in H4. } apply (IHnode_eval H0 n final_cs' ({{final_cs', n'}} :: cpath)).
+      { apply (prog_index_match prog parent path cs path0 cs0 n0); auto. 
+      subst cpath. assert ({{final_cs', n'}} = child0). { unfold child0.
+      f_equal. easy. easy. } subst.
+      apply (initial_state_match prog parent0 child0 path0 H9 H1). subst. injection H3; intros. auto. }
+      subst. simpl in H7. rewrite H7 in H. injection H; intros; subst.
+      simpl in H3. injection H3; intros. clear H3. clear H.
+      rewrite <- (initial_state_match prog parent0 child0 path0 H9 H1) in H2.
+      assert ((fillState (initial_state path0) (extractState parent)) = cs0). {
+        unfold final_cs.
+        apply (IHnode_eval H0 n cs0 path0 H9 H4
+             (initial_state path0) H2). reflexivity.
+       } subst. clear IHnode_eval. unfold final_cs.
+      rewrite <- (initial_state_match prog parent0 child0 path0 H9 H1). simpl.
+      f_equal. f_equal. unfold result.
+      apply (int_exp_equiv ie (extractState parent) (initial_state path0)).
+    + assert (n0 = extractIndex parent).
+      { apply (prog_index_match prog parent path cs path0 cs0 n0); auto. 
+      subst cpath. assert ({{final_cs', n'}} = child1). { unfold child1.
+      f_equal. easy. } subst. easy. subst.
+      apply (initial_state_match prog parent0 child1 path0 H10 H1). subst. injection H3; intros. auto. }
 
 
 
