@@ -732,7 +732,8 @@ Proof.
       try wrong_ind_auto. subst. unfold child. reflexivity.
     + subst; assert (n0 = n);
       simpl in H4; injection H4; intro Hnew; fold child1 in H3; 
-      try wrong_ind_auto. subst. 
+      try wrong_ind_auto. subst. unfold child. simpl. rewrite H9 in H.
+      injection H; intros. subst. 
 
 
 Admitted.
