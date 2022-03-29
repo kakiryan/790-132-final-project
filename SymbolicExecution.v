@@ -842,6 +842,38 @@ Proof.
       
       subst. simpl in H7. rewrite H7 in H. discriminate.
 
+  - inversion H3.
+    + simpl in *. subst. injection H4; intros.
+      apply path_not_empty in H2. destruct H2. subst.
+      discriminate.
+
+    + assert (n0 = extractIndex parent).
+      { apply (prog_index_match prog parent path cs path0 cs0 n0); auto.
+        subst cpath. assert ({{final_cs', n'}} = child0).
+        { unfold child0. f_equal. rewrite H7. easy. easy. } subst. simpl.
+        destruct path0. inversion H11. easy. subst.
+        simpl. simpl in H5. destruct (substituteBool sbe
+       match path0 with
+       | [] => (x, result) :: cs0
+       | _ :: _ => initial_state path0
+       end). simpl in H5. easy. discriminate.
+        subst. injection H4; intros. auto. }
+
+      subst. simpl in H9. rewrite H9 in H. discriminate.
+
+    + assert (n0 = extractIndex parent).
+      { apply (prog_index_match prog parent path cs path0 cs0 n0); auto.
+        subst cpath. assert ({{final_cs', n'}} = child1).
+        { unfold child1. f_equal. rewrite H8. easy. } subst. simpl.
+        destruct path0. inversion H11. easy. subst.
+        simpl. simpl in H5. destruct (substituteBool sbe
+       match path0 with
+       | [] => extractConcreteState c
+       | _ :: _ => initial_state path0
+       end). simpl in H5. easy. discriminate.
+        subst. apply (initial_state_match prog parent0 child1 path0 H12 H3).
+        subst. injection H4; intros. auto. }
+
 
 
 
