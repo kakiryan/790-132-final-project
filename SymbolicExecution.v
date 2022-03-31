@@ -180,7 +180,7 @@ Qed.
 
 Definition prog_1 := <{ X := A + B ;
                         Y := B + C ; 
-                        Z := X + Y - B }>.
+                        W := X + Y - B }>.
 
 Definition empty_st := [(A, sA); (B, sB); (C, sC)].
 
@@ -641,14 +641,6 @@ intros. induction pc.
   * discriminate.
 Qed.
 
-Ltac wrong H := apply concrete_path_head in H; destruct H; discriminate.
-
-Ltac auto_wrong :=
-  match goal with
-    H: concrete_eval ?P ?N []
-    |- _ => wrong H
-  end.
-
 Lemma initial_state_match : forall prog parent child cpath,
   concrete_eval prog parent cpath ->
   concrete_eval prog child (child :: cpath) ->
@@ -656,6 +648,43 @@ Lemma initial_state_match : forall prog parent child cpath,
 Proof.
   intros. inversion H; try reflexivity.
 Qed.
+
+Theorem property_3 : forall prog node path cs cpath final_cs final_cs' n n',
+  (* with some concrete state that we get by symbolically executing and then
+  substituting...*)
+  (* this may depend on property 2? *)
+  final_cs = fillState cs (extractState node) ->
+  n = (extractIndex node) ->
+  node_eval prog node path ->
+  (*... and assuming the operations are valid/the path is satisfiable ..**)
+  eval_pc (extractPathCond node) cs = true ->
+  (*... then we have some concrete node in the relation with internal final_cs'
+  that is the result of taking some concrete path, cpath. **)
+  concrete_eval prog {{final_cs', n'}} cpath ->
+  (* additionally, the inital state of our concrete path is equal to the same 
+   concrete state as before.. *)
+  initial_state cpath = cs ->
+  (* ... if the lengths of the paths are the same ... *)
+  length path = length cpath ->
+  (* then the final concrete state that we arrived at via substitution is the 
+   same one we arrived at via directly executing the program concretely. *)
+  final_cs = final_cs' /\ n = n'.
+Proof.
+  intros. generalize dependent n. generalize dependent final_cs. generalize dependent cpath. generalize dependent final_cs'. induction H1; intros.
+  - admit.
+  - inversion H3.
+    + subst. simpl in *. injection H5; intros. apply path_not_empty in H1.
+      destruct H1. subst. discriminate.
+    + assert ((fillState cs (extractState parent)) = cs0).
+      { assert (n = (extractIndex parent)). { reflexivity. } apply (IHnode_eval _ cs0 path0 _ _ _ (fillState cs (extractState parent)) _ n H12).
+
+(** Ltac wrong H := apply concrete_path_head in H; destruct H; discriminate.
+
+Ltac auto_wrong :=
+  match goal with
+    H: concrete_eval ?P ?N []
+    |- _ => wrong H
+  end.
 
 Ltac wrong_ind IH A B C D final_cs' n0 path0 prog parent0 child1 :=
   apply (IH final_cs' n0 path0 A B (initial_state path0));
@@ -733,7 +762,7 @@ Proof.
     + subst; assert (n0 = n);
       simpl in H4; injection H4; intro Hnew; fold child1 in H3; 
       try wrong_ind_auto. subst. unfold child. simpl. rewrite H9 in H.
-      injection H; intros. subst. 
+      injection H; intros. subst. clear IHnode_eval. clear H. clear H9. clear H4. clear Hnew. 
 
 
 Admitted.
@@ -900,7 +929,7 @@ intros. remember H as E. clear HeqE. induction H; intros.
     apply andb_true_elim2 in H0. easy.
   * simpl. simpl in H0. apply andb_true_elim2 in H0. apply H0.
 - 
-Admitted.
+Admitted. *)
 
 (* Setting up new variable names for example 2. *)
 Definition J: string := "J".
