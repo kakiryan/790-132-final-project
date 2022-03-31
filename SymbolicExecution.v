@@ -649,34 +649,26 @@ Proof.
   intros. inversion H; try reflexivity.
 Qed.
 
-Theorem property_3 : forall prog node path cs cpath final_cs final_cs' n n',
-  (* with some concrete state that we get by symbolically executing and then
-  substituting...*)
-  (* this may depend on property 2? *)
-  final_cs = fillState cs (extractState node) ->
-  n = (extractIndex node) ->
+Theorem property_3 : forall prog node path,
   node_eval prog node path ->
-  (*... and assuming the operations are valid/the path is satisfiable ..**)
+  forall cs cpath final_cs final_cs' n n',
   eval_pc (extractPathCond node) cs = true ->
-  (*... then we have some concrete node in the relation with internal final_cs'
-  that is the result of taking some concrete path, cpath. **)
   concrete_eval prog {{final_cs', n'}} cpath ->
-  (* additionally, the inital state of our concrete path is equal to the same 
-   concrete state as before.. *)
   initial_state cpath = cs ->
-  (* ... if the lengths of the paths are the same ... *)
   length path = length cpath ->
-  (* then the final concrete state that we arrived at via substitution is the 
-   same one we arrived at via directly executing the program concretely. *)
+  n = (extractIndex node) ->
+  final_cs = fillState cs (extractState node) ->
   final_cs = final_cs' /\ n = n'.
 Proof.
-  intros. generalize dependent n. generalize dependent final_cs. generalize dependent cpath. generalize dependent final_cs'. induction H1; intros.
+  intros prog node path H. induction H; intros.
   - admit.
-  - inversion H3.
-    + subst. simpl in *. injection H5; intros. apply path_not_empty in H1.
-      destruct H1. subst. discriminate.
-    + assert ((fillState cs (extractState parent)) = cs0).
-      { assert (n = (extractIndex parent)). { reflexivity. } apply (IHnode_eval _ cs0 path0 _ _ _ (fillState cs (extractState parent)) _ n H12).
+  - inversion H2.
+    + subst. simpl in *. injection H4; intros. apply path_not_empty in H0.
+      destruct H0. subst. discriminate.
+    + assert ((fillState cs (extractState parent)) = cs0 /\ n = n1).
+      { apply (IHnode_eval cs path0 (fillState cs (extractState parent)) cs0 n n1); auto. subst. apply (initial_state_match _ _ _ _ H11 H2). subst. injection H4; intros. easy. } subst. clear IHnode_eval. split.
+      * 
+      * simpl. destruct H12. rewrite H5. reflexivity.
 
 (** Ltac wrong H := apply concrete_path_head in H; destruct H; discriminate.
 
