@@ -178,11 +178,11 @@ Qed.
 
 (* ========================= End: Proof of Property 1. ==============================*)
 
-Definition prog_1 := <{ X := A + B ;
+(* Definition prog_1 := <{ X := A + B ;
                         Y := B + C ; 
                         W := X + Y - B }>.
 
-Definition empty_st := [(A, sA); (B, sB); (C, sC)].
+Definition empty_st := [(A, sA); (B, sB); (C, sC)]. *)
 
 
 (**Example prog_1_ex : node_eval prog_1 <<[(Z, <[sA + sB + (sB + sC) - sB]>); (Y, <[sB + sC]>); (X, <[sA + sB]>); (A, sA); (B, sB); (C, sC)], nil, 3>>.
@@ -241,7 +241,7 @@ Qed.
 Lemma pathcond_extend : forall prog node1 node2 path2,
   (ancestor prog node1 node2 path2) ->
   exists path_subset, extractPathCond node2 = path_subset ++ extractPathCond node1.
-Proof. Admitted.
+Proof. Abort.
 (* intros. destruct H. induction H; destruct H0; try (rewrite <- H0);
     try (exists nil; simpl; unfold node; reflexivity);
     try (apply IHnode_eval in H0; apply H0).
@@ -324,7 +324,7 @@ Proof.
   intros. destruct H.
   - destruct H as [n H]. destruct parent.
     exists <<s, pc, n>>. split.
-    + simpl in *. admit.
+    + simpl in *. Abort. (* admit.
     + intros child Hchild.
       inversion Hchild.
       * apply base_path in H0. rewrite <- H3 in H0. destruct H0.
@@ -332,7 +332,7 @@ Proof.
         { apply (unique_path_head prog _ _ path); easy. }
         simpl in *. subst. unfold parent in H5. injection H5. intros.
         subst. unfold stmt in H. rewrite H in H2. inversion H2.
-Admitted.
+Admitted. *)
 
 Lemma pc_differ : forall prog node1 node2 path1 path2,
   let pc1 := (extractPathCond node1) in
@@ -352,11 +352,10 @@ Proof.
   induction H.
   - simpl in *. apply base_path in H0. apply H1 in H0. destruct H0.
   - assert (exists! child', node_eval prog child' (child' :: path)).
-  { apply (unique_child _ parent _); try auto. right. exists x, ie; easy. }
+  (* { apply (unique_child _ parent _); try auto. right. exists x, ie; easy. }
   destruct H4 as [child' H4]. destruct H4.
 
-  apply IHnode_eval; auto. admit. simpl in H2. apply not_or_and in H2.
-  easy.
+  apply IHnode_eval; auto. *)
 Abort.
 
 Lemma hope : forall prog node1 node2 path1 path2,
@@ -370,28 +369,6 @@ Proof.
   (*- right. apply IHnode_eval in H1. right. destruct H1 as [H5 | H6].
     + admit.
     +  *)
-  - apply IHnode_eval in H1. destruct H1.
-    + left. admit.
-    + right. right. auto.
-  - unfold child in H1. simpl in H1. apply superset_SAT in H1.
-    apply IHnode_eval in H1. destruct H1.
-    + admit.
-    + right. right. auto.
-  - unfold child in H1. simpl in H1. apply superset_SAT in H1.
-    apply IHnode_eval in H1. destruct H1.
-    + admit.
-    + right. right. auto.
-  - apply IHnode_eval in H1. destruct H1.
-    + admit.
-    + right. right. auto.
-  - unfold child in H1. simpl in H1. apply superset_SAT in H1.
-    apply IHnode_eval in H1. destruct H1.
-    + admit.
-    + right. right. auto.
-  - unfold child in H1. simpl in H1. apply superset_SAT in H1.
-    apply IHnode_eval in H1. destruct H1.
-    + admit.
-    + right. right. auto.
 Abort.
   
   
@@ -412,7 +389,7 @@ Abort.
       right. right. apply H4.*)
 
 
-Axiom excluded_middle : forall P, P \/ ~P.
+(* Axiom excluded_middle : forall P, P \/ ~P. *)
 
 Theorem property_2 : forall prog node1 node2 path1 path2, 
 (node_eval prog node1 path1) -> 
@@ -432,12 +409,12 @@ Proof.
   (** Now we can proceed by induction on H. *)
 
   (* apply SAT_terms in H4. destruct H4 as [cs H4]. *)
-    - apply base_path in H0. apply H1 in H0. apply H0.
+    (* - apply base_path in H0. apply H1 in H0. apply H0.
     - assert (In parent path2 \/ ~ In parent path2).
       { apply excluded_middle. }
       destruct H5.
       + clear IHnode_eval.
-    (* apply IHnode_eval; auto.
+    apply IHnode_eval; auto.
       clear IHnode_eval. clear H4.
       + intro.
       + intro. assert (exists! child', node_eval prog child' (child' :: path)).
@@ -463,8 +440,6 @@ Abort.
 (* ==================== End: Proof of Property 2 ===================== *)
 
 (* ==================== Start: Proof of Property 3 ===================== *)
-
-Check Z.
 
 Fixpoint populateParams (params : list string) (args : list Z) : concreteState :=
   match params with
@@ -661,13 +636,24 @@ Theorem property_3 : forall prog node path,
   final_cs = final_cs' /\ n = n'.
 Proof.
   intros prog node path H. induction H; intros.
-  - admit.
+  - simpl in *. subst. clear H. inversion H0;
+    try (destruct cpath; try discriminate;
+      try (injection H5); try (injection H4); intros; subst;
+      simpl in H2; injection H2; intros;
+      try (apply concrete_path_head in H6);
+      try (apply concrete_path_head in H5);
+      try (destruct H6); try (destruct H5); subst; discriminate).
+    + split; try easy. simpl. subst. apply fillEmptySt.
   - inversion H2.
     + subst. simpl in *. injection H4; intros. apply path_not_empty in H0.
       destruct H0. subst. discriminate.
     + assert ((fillState cs (extractState parent)) = cs0 /\ n = n1).
-      { apply (IHnode_eval cs path0 (fillState cs (extractState parent)) cs0 n n1); auto. subst. apply (initial_state_match _ _ _ _ H11 H2). subst. injection H4; intros. easy. } subst. clear IHnode_eval. split.
-      * 
+      { apply (IHnode_eval cs path0 (fillState cs (extractState parent)) cs0 n n1); auto. subst. apply (initial_state_match _ _ _ _ H11 H2). subst. injection H4; intros. easy. } subst. split.
+      * destruct H12. simpl. simpl in H3. rewrite H3.
+        subst. rewrite H9 in H. injection H; intros; subst.
+        f_equal. f_equal. clear H. clear IHnode_eval.
+        unfold se. unfold result. rewrite_strat outermost <- H3.
+        apply int_exp_equiv.
       * simpl. destruct H12. rewrite H5. reflexivity.
 
 (** Ltac wrong H := apply concrete_path_head in H; destruct H; discriminate.

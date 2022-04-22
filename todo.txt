@@ -5,6 +5,3 @@ Things to do for project
 - Apply to something else
 
 - Comment and format
-
-Nice to have:
-- version of node_eval without paths and proof that it's equivalent
