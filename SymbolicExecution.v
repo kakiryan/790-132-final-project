@@ -655,6 +655,22 @@ Proof.
         unfold se. unfold result. rewrite_strat outermost <- H3.
         apply int_exp_equiv.
       * simpl. destruct H12. rewrite H5. reflexivity.
+    + assert ((fillState cs (extractState parent)) = cs0 /\ n = n1).
+      { apply (IHnode_eval cs path0 (fillState cs (extractState parent)) cs0 n n1); auto. subst. easy. subst. apply (initial_state_match _ _ _ _ H12 H2). subst. injection H4; intros. easy. }
+      destruct H13. subst n1. rewrite H9 in H. discriminate.
+    + assert ((fillState cs (extractState parent)) = cs0 /\ n = n1).
+      { apply (IHnode_eval cs path0 (fillState cs (extractState parent)) cs0 n n1); auto. subst. easy. subst. apply (initial_state_match _ _ _ _ H12 H2). subst. injection H4; intros. easy. }
+      destruct H13. subst n1. rewrite H9 in H. discriminate.
+    + assert ((fillState cs (extractState parent)) = cs0 /\ n = n1).
+      { apply (IHnode_eval cs path0 (fillState cs (extractState parent)) cs0 n n1); auto. subst. easy. subst. apply (initial_state_match _ _ _ _ H11 H2). subst. injection H4; intros. easy. }
+      destruct H12. subst n1. rewrite H9 in H. discriminate.
+    + assert ((fillState cs (extractState parent)) = cs0 /\ n = n1).
+      { apply (IHnode_eval cs path0 (fillState cs (extractState parent)) cs0 n n1); auto. subst. easy. subst. apply (initial_state_match _ _ _ _ H12 H2). subst. injection H4; intros. easy. }
+      destruct H13. subst n1. rewrite H9 in H. discriminate.
+    + assert ((fillState cs (extractState parent)) = cs0 /\ n = n1).
+      { apply (IHnode_eval cs path0 (fillState cs (extractState parent)) cs0 n n1); auto. subst. easy. subst. apply (initial_state_match _ _ _ _ H12 H2). subst. injection H4; intros. easy. }
+      destruct H13. subst n1. rewrite H9 in H. discriminate.
+  - 
 
 (** Ltac wrong H := apply concrete_path_head in H; destruct H; discriminate.
 
